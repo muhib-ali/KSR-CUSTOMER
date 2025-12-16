@@ -265,13 +265,13 @@ async function seed() {
     const usersData = [
       {
         name: "Arsalan",
-        email: "arsalan@mentorhealth.com",
+        email: "arsalan@aarcsol.com",
         password: "Password@123",
         role_slug: "platformAdmin",
       },
       {
         name: "Ali",
-        email: "ali@mentorhealth.com",
+        email: "ali@aarcsol.com",
         password: "Password@123",
         role_slug: "platformManager",
       },
