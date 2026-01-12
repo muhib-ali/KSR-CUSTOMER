@@ -6,11 +6,17 @@ import { ConfigModule } from "@nestjs/config";
 import { TerminusModule } from "@nestjs/terminus";
 import { APP_FILTER, APP_GUARD } from "@nestjs/core";
 import { DataSource } from "typeorm";
-import { redisStore } from "cache-manager-redis-yet";
 import { appDataSourceOptions } from "./config/database.config";
 import { AuthModule } from "./auth/auth.module";
 import { HealthModule } from "./health/health.module";
 import { SharedModule } from "./shared/shared.module";
+import { ProductModule } from "./products/product.module";
+import { CategoryModule } from "./category/category.module";
+import { BrandModule } from "./brand/brand.module";
+import { CartModule } from "./cart/cart.module";
+import { WishlistModule } from "./wishlist/wishlist.module";
+import { OrdersModule } from "./orders/orders.module";
+import { PromoCodeModule } from "./promo-codes/promo-code.module";
 import { GlobalExceptionFilter } from "./filters/global-exception.filter";
 import { ThrottlerGuard } from "@nestjs/throttler";
 
@@ -22,30 +28,11 @@ import { ThrottlerGuard } from "@nestjs/throttler";
       envFilePath: ".env",
     }),
 
-    // Cache with Redis
-    CacheModule.registerAsync({
+    // Cache
+    CacheModule.register({
       isGlobal: true,
-      useFactory: async () => {
-        try {
-          return {
-            store: await redisStore({
-              socket: {
-                host: process.env.REDIS_HOST || "localhost",
-                port: parseInt(process.env.REDIS_PORT || "6379", 10),
-              },
-              password: process.env.REDIS_PASSWORD,
-            }),
-            ttl: 900000, // 15 minutes in milliseconds
-            max: 1000, // Max items in cache
-          };
-        } catch (error) {
-          console.warn("Redis connection failed, falling back to memory cache");
-          return {
-            ttl: 900000, // 15 minutes in milliseconds
-            max: 1000, // Max items in cache
-          };
-        }
-      },
+      ttl: 300, // 5 minutes
+      max: 100, // maximum number of items in cache
     }),
 
     // Rate Limiting
@@ -88,6 +75,13 @@ import { ThrottlerGuard } from "@nestjs/throttler";
     // App modules
     AuthModule,
     HealthModule,
+    ProductModule,
+    CategoryModule,
+    BrandModule,
+    CartModule,
+    WishlistModule,
+    OrdersModule,
+    PromoCodeModule,
   ],
   providers: [
     // Global exception filter

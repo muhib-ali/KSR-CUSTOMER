@@ -11,7 +11,7 @@ export const dataSourceOptions: DataSourceOptions = {
   synchronize: false,
   ssl: process.env.DB_SSL === "true",
   entities: [__dirname + "/../entities/*.entity{.ts,.js}"],
-  migrations: ["migrations/*{.ts,.js}"],
+  // No migrations - KSR-ADMIN handles all migrations
 };
 
 // Separate configuration for app runtime (without migrations)

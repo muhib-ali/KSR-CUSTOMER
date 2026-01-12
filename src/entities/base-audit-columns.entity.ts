@@ -9,7 +9,7 @@ export abstract class BaseAuditColumns {
   @PrimaryGeneratedColumn("uuid")
   id: string;
 
-  @Column({ type: "boolean", default: true })
+  @Column({ type: "boolean", default: true, nullable: true })
   is_active: boolean;
 
   @Column({ type: "varchar", nullable: true })

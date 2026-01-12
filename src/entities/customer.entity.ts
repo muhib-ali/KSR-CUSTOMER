@@ -1,6 +1,5 @@
-import { Entity, Column, ManyToOne, JoinColumn, Unique } from "typeorm";
+import { Entity, Column, Unique, OneToMany } from "typeorm";
 import { BaseAuditColumns } from "./base-audit-columns.entity";
-import { Role } from "./role.entity";
 
 @Entity("customers")
 @Unique(["email"])
@@ -27,10 +26,7 @@ export class Customer extends BaseAuditColumns {
   @Column({ type: "boolean", default: false })
   is_phone_verified: boolean;
 
-  @Column({ type: "uuid" })
-  role_id: string;
-
-  @ManyToOne(() => Role)
-  @JoinColumn({ name: "role_id" })
-  role: Role;
+  // Relationships - Use string to avoid circular import
+  @OneToMany("Order", "user")
+  orders: any[];
 }

@@ -9,11 +9,12 @@ import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import * as bcrypt from "bcrypt";
 import { Customer } from "../entities/customer.entity";
-import { Role } from "../entities/role.entity";
 import { CustomerToken } from "../entities/customer-token.entity";
 import { LoginDto } from "./dto/login.dto";
 import { RegisterDto } from "./dto/register.dto";
 import { RefreshDto } from "./dto/refresh.dto";
+import { EditProfileDto } from "./dto/edit-profile.dto";
+import { ChangePasswordDto } from "./dto/change-password.dto";
 import { CacheService } from "../cache/cache.service";
 import { AppConfigService } from "../config/config.service";
 import { ResponseHelper } from "../common/helpers/response.helper";
@@ -26,31 +27,12 @@ export class AuthService {
   constructor(
     @InjectRepository(Customer)
     private customerRepository: Repository<Customer>,
-    @InjectRepository(Role)
-    private roleRepository: Repository<Role>,
     @InjectRepository(CustomerToken)
     private tokenRepository: Repository<CustomerToken>,
     private jwtService: JwtService,
     private cacheService: CacheService,
     private configService: AppConfigService
   ) {}
-
-  private async resolveCustomerRoleId(): Promise<string> {
-    const roleId = process.env.CUSTOMER_ROLE_ID;
-    if (roleId) {
-      return roleId;
-    }
-
-    const roleSlug = process.env.CUSTOMER_ROLE_SLUG || "customer";
-    const role = await this.roleRepository.findOne({ where: { slug: roleSlug } });
-    if (!role) {
-      throw new BadRequestException(
-        `Customer role not found (slug: ${roleSlug}). Set CUSTOMER_ROLE_ID or seed roles table.`
-      );
-    }
-
-    return role.id;
-  }
 
   async register(registerDto: RegisterDto): Promise<ApiResponse<any>> {
     const { fullname, username, email, password, phone } = registerDto;
@@ -67,7 +49,6 @@ export class AuthService {
       throw new BadRequestException("Username already exists");
     }
 
-    const roleId = await this.resolveCustomerRoleId();
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const customer = this.customerRepository.create({
@@ -76,22 +57,13 @@ export class AuthService {
       email,
       password: hashedPassword,
       phone: phone || null,
-      role_id: roleId,
       is_email_verified: false,
       is_phone_verified: false,
     });
 
     const savedCustomer = await this.customerRepository.save(customer);
-    const customerWithRole = await this.customerRepository.findOne({
-      where: { id: savedCustomer.id },
-      relations: ["role"],
-    });
 
-    if (!customerWithRole) {
-      throw new BadRequestException("Customer registration failed");
-    }
-
-    const payload = { sub: customerWithRole.id, email: customerWithRole.email };
+    const payload = { sub: savedCustomer.id, email: savedCustomer.email };
     const accessToken = this.jwtService.sign(payload, {
       expiresIn: this.configService.jwtAccessExpires,
     });
@@ -104,8 +76,8 @@ export class AuthService {
     expiresAt.setMinutes(expiresAt.getMinutes() + accessExpiresInMinutes);
 
     const tokenRecord = this.tokenRepository.create({
-      customer_id: customerWithRole.id,
-      name: `${customerWithRole.fullname} - ${new Date().toISOString()}`,
+      customer_id: savedCustomer.id,
+      name: `${savedCustomer.fullname} - ${new Date().toISOString()}`,
       token: accessToken,
       refresh_token: refreshToken,
       expires_at: expiresAt,
@@ -114,15 +86,14 @@ export class AuthService {
     await this.tokenRepository.save(tokenRecord);
 
     const tokenData = {
-      customerId: customerWithRole.id,
+      customerId: savedCustomer.id,
       expires_at: expiresAt,
       revoked: false,
       customer: {
-        id: customerWithRole.id,
-        fullname: customerWithRole.fullname,
-        username: customerWithRole.username,
-        email: customerWithRole.email,
-        role: customerWithRole.role,
+        id: savedCustomer.id,
+        fullname: savedCustomer.fullname,
+        username: savedCustomer.username,
+        email: savedCustomer.email,
       },
     };
     await this.cacheService.cacheTokenData(
@@ -131,16 +102,15 @@ export class AuthService {
       accessExpiresInMinutes
     );
 
-    this.logger.log(`Customer registered successfully: ${customerWithRole.email}`);
+    this.logger.log(`Customer registered successfully: ${savedCustomer.email}`);
 
     return ResponseHelper.success(
       {
         customer: {
-          id: customerWithRole.id,
-          fullname: customerWithRole.fullname,
-          username: customerWithRole.username,
-          email: customerWithRole.email,
-          role: customerWithRole.role,
+          id: savedCustomer.id,
+          fullname: savedCustomer.fullname,
+          username: savedCustomer.username,
+          email: savedCustomer.email,
         },
         token: accessToken,
         refresh_token: refreshToken,
@@ -158,7 +128,6 @@ export class AuthService {
     // Find customer by email
     const customer = await this.customerRepository.findOne({
       where: { email },
-      relations: ["role"],
     });
 
     if (!customer) {
@@ -207,7 +176,6 @@ export class AuthService {
         fullname: customer.fullname,
         username: customer.username,
         email: customer.email,
-        role: customer.role,
       },
     };
     await this.cacheService.cacheTokenData(
@@ -226,7 +194,6 @@ export class AuthService {
           fullname: customer.fullname,
           username: customer.username,
           email: customer.email,
-          role: customer.role,
         },
         token: accessToken,
         refresh_token: refreshToken,
@@ -251,7 +218,6 @@ export class AuthService {
           customer_id: payload.sub,
           revoked: false,
         },
-        relations: ["customer"],
       });
 
       if (!tokenRecord) {
@@ -281,12 +247,17 @@ export class AuthService {
       tokenRecord.expires_at = newExpiresAt;
       await this.tokenRepository.save(tokenRecord);
 
+      // Get customer for cache
+      const customer = await this.customerRepository.findOne({
+        where: { id: tokenRecord.customer_id },
+      });
+
       // Update cache with new token
       const tokenData = {
         customerId: tokenRecord.customer_id,
         expires_at: newExpiresAt,
         revoked: false,
-        customer: tokenRecord.customer,
+        customer: customer,
       };
       await this.cacheService.cacheTokenData(
         newAccessToken,
@@ -294,7 +265,7 @@ export class AuthService {
         accessExpiresInMinutes
       );
 
-      this.logger.log(`Token refreshed for customer: ${tokenRecord.customer.email}`);
+      this.logger.log(`Token refreshed for customer: ${customer?.email || "unknown"}`);
 
       return ResponseHelper.success(
         {
@@ -359,7 +330,6 @@ export class AuthService {
           revoked: false,
         },
         select: ["id", "expires_at", "revoked", "customer_id"],
-        relations: ["customer", "customer.role"],
       });
 
       if (!tokenRecord) {
@@ -371,12 +341,21 @@ export class AuthService {
         return null;
       }
 
+      // Get customer data
+      const customer = await this.customerRepository.findOne({
+        where: { id: tokenRecord.customer_id },
+      });
+
+      if (!customer) {
+        return null;
+      }
+
       // Cache the valid token data for future requests
       const tokenData = {
         customerId: tokenRecord.customer_id,
         expires_at: tokenRecord.expires_at,
         revoked: tokenRecord.revoked,
-        customer: tokenRecord.customer,
+        customer: customer,
       };
 
       const remainingMinutes = Math.floor(
@@ -391,10 +370,103 @@ export class AuthService {
         );
       }
 
-      return tokenRecord.customer;
+      return customer;
     } catch (error) {
       this.logger.error(`Token validation error: ${error.message}`);
       return null;
     }
+  }
+
+  async getProfile(customerId: string): Promise<ApiResponse<any>> {
+    try {
+      const customer = await this.customerRepository.findOne({ 
+        where: { id: customerId },
+        select: ['id', 'fullname', 'username', 'email', 'phone', 'is_email_verified', 'is_phone_verified', 'created_at', 'updated_at']
+      });
+
+      if (!customer) {
+        throw new UnauthorizedException("Customer not found");
+      }
+
+      return ResponseHelper.success(
+        customer,
+        "Profile retrieved successfully",
+        "Authentication"
+      );
+    } catch (error) {
+      this.logger.error(`Get profile error: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async editProfile(customerId: string, editProfileDto: EditProfileDto): Promise<ApiResponse<any>> {
+    try {
+      const customer = await this.customerRepository.findOne({ 
+        where: { id: customerId }
+      });
+
+      if (!customer) {
+        throw new UnauthorizedException("Customer not found");
+      }
+
+      const { fullname, username, phone } = editProfileDto;
+
+      // Check if username already exists (if username is being updated)
+      if (username && username !== customer.username) {
+        const existingUsername = await this.customerRepository.findOne({ where: { username } });
+        if (existingUsername) {
+          throw new BadRequestException("Username already exists");
+        }
+      }
+
+      // Update customer fields
+      if (fullname) customer.fullname = fullname;
+      if (username) customer.username = username;
+      if (phone) customer.phone = phone;
+
+      const updatedCustomer = await this.customerRepository.save(customer);
+
+      // Return updated customer without password
+      const { password, ...customerWithoutPassword } = updatedCustomer;
+
+      return ResponseHelper.success(
+        customerWithoutPassword,
+        "Profile updated successfully",
+        "Authentication"
+      );
+    } catch (error) {
+      this.logger.error(`Edit profile error: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async changePassword(customerId: string, changePasswordDto: ChangePasswordDto): Promise<ApiResponse<null>> {
+    const { current_password, new_password, confirm_password } = changePasswordDto;
+
+    if (new_password !== confirm_password) {
+      throw new BadRequestException("Passwords do not match");
+    }
+
+    const customer = await this.customerRepository.findOne({ where: { id: customerId } });
+    if (!customer) {
+      throw new UnauthorizedException("Customer not found");
+    }
+
+    const isPasswordValid = await bcrypt.compare(current_password, customer.password);
+    if (!isPasswordValid) {
+      throw new BadRequestException("Current password is incorrect");
+    }
+
+    const hashedPassword = await bcrypt.hash(new_password, 10);
+    await this.customerRepository.update(customer.id, {
+      password: hashedPassword,
+      updated_at: new Date(),
+    });
+
+    return ResponseHelper.success(
+      null,
+      "Password changed successfully",
+      "Authentication"
+    );
   }
 }

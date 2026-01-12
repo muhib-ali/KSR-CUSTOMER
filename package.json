@@ -9,9 +9,10 @@
     "start": "node dist/main.js",
     "start:dev": "nest start --watch",
     "build": "nest build",
-    "migration:generate": "typeorm-ts-node-commonjs migration:generate ./migrations/Init -d src/config/database.config.ts",
+    "migration:generate": "typeorm-ts-node-commonjs migration:generate ./src/migrations/CustomerMigration -d src/config/database.config.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/config/database.config.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/config/database.config.ts",
+    "migration:show": "typeorm-ts-node-commonjs migration:show -d src/config/database.config.ts",
     "seed": "ts-node src/seeders/seed.ts"
   },
   "dependencies": {

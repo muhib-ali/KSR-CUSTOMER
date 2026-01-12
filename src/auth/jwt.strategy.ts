@@ -19,12 +19,12 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     const token = req.headers.authorization?.split(" ")[1];
 
     // Validate token in database
-    const user = await this.authService.validateToken(token, payload.sub);
+    const customer = await this.authService.validateToken(token, payload.sub);
 
-    if (!user) {
+    if (!customer) {
       return null;
     }
 
-    return user;
+    return customer;
   }
 }
