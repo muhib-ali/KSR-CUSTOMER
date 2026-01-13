@@ -17,6 +17,16 @@ export class CategoryController {
     return this.categoryService.getAllCategories();
   }
 
+  @Get('featured')
+  @ApiOperation({ summary: 'Get featured categories (top categories by product count)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Featured categories retrieved successfully',
+  })
+  async getFeaturedCategories() {
+    return this.categoryService.getFeaturedCategories();
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get category by ID' })
   @ApiResponse({

@@ -207,6 +207,10 @@ export class AuthService {
   async refresh(refreshDto: RefreshDto): Promise<ApiResponse<any>> {
     const { refresh_token } = refreshDto;
 
+    if (!refresh_token) {
+      throw new UnauthorizedException("Refresh token is required");
+    }
+
     try {
       // Verify refresh token
       const payload = this.jwtService.verify(refresh_token);
@@ -221,12 +225,14 @@ export class AuthService {
       });
 
       if (!tokenRecord) {
-        throw new UnauthorizedException("Invalid refresh token");
+        this.logger.warn(`Token not found in DB for customer: ${payload.sub}`);
+        throw new UnauthorizedException("Invalid or expired refresh token. Please login again.");
       }
 
       // Check if token is expired
       if (new Date() > tokenRecord.expires_at) {
-        throw new UnauthorizedException("Token expired");
+        this.logger.warn(`Token expired for customer: ${payload.sub}`);
+        throw new UnauthorizedException("Refresh token expired. Please login again.");
       }
 
       // Generate new access token
@@ -276,7 +282,57 @@ export class AuthService {
         "Authentication"
       );
     } catch (error) {
-      throw new UnauthorizedException("Invalid refresh token");
+      this.logger.error(`Refresh token error: ${error.message}`);
+      
+      if (error.name === 'JsonWebTokenError') {
+        throw new UnauthorizedException("Invalid refresh token format. Please login again.");
+      } else if (error.name === 'TokenExpiredError') {
+        throw new UnauthorizedException("Refresh token expired. Please login again.");
+      } else if (error instanceof UnauthorizedException) {
+        throw error; // Re-throw our custom errors
+      } else {
+        throw new UnauthorizedException("Token refresh failed. Please login again.");
+      }
+    }
+  }
+
+  async debugRefreshToken(refresh_token: string): Promise<ApiResponse<any>> {
+    try {
+      // Verify refresh token
+      const payload = this.jwtService.verify(refresh_token);
+      
+      // Find token record in database
+      const tokenRecord = await this.tokenRepository.findOne({
+        where: {
+          refresh_token,
+          customer_id: payload.sub,
+          revoked: false,
+        },
+      });
+
+      return ResponseHelper.success({
+        token_valid: true,
+        payload: {
+          sub: payload.sub,
+          email: payload.email,
+          exp: payload.exp,
+          iat: payload.iat,
+        },
+        token_record: tokenRecord ? {
+          id: tokenRecord.id,
+          customer_id: tokenRecord.customer_id,
+          expires_at: tokenRecord.expires_at,
+          revoked: tokenRecord.revoked,
+          created_at: tokenRecord.created_at,
+        } : null,
+        is_expired: tokenRecord ? new Date() > tokenRecord.expires_at : null,
+      }, "Token debug information", "Debug");
+    } catch (error) {
+      return ResponseHelper.success({
+        token_valid: false,
+        error: error.message,
+        error_name: error.name,
+      }, "Token debug information", "Debug");
     }
   }
 

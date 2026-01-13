@@ -12,6 +12,34 @@ export class CategoryService {
     private categoryRepository: Repository<Category>,
   ) {}
 
+  async getFeaturedCategories(): Promise<ApiResponse<any>> {
+    const rows = await this.categoryRepository
+      .createQueryBuilder('category')
+      .leftJoin('category.products', 'product')
+      .select('category.id', 'id')
+      .addSelect('category.name', 'name')
+      .addSelect('COUNT(product.id)', 'productCount')
+      .where('category.is_active = :isActive', { isActive: true })
+      .andWhere('product.is_active = :productIsActive', { productIsActive: true })
+      .groupBy('category.id')
+      .addGroupBy('category.name')
+      .orderBy('COUNT(product.id)', 'DESC')
+      .limit(4)
+      .getRawMany<{ id: string; name: string; productCount: string }>();
+
+    const categories = rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      productCount: Number(row.productCount) || 0,
+    }));
+
+    return ResponseHelper.success(
+      categories,
+      'Featured categories retrieved successfully',
+      'Categories'
+    );
+  }
+
   async getAllCategories(): Promise<ApiResponse<any>> {
     const categories = await this.categoryRepository
       .createQueryBuilder('category')

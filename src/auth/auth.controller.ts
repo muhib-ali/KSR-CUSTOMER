@@ -127,12 +127,33 @@ export class AuthController {
       },
     },
   })
-  @ApiResponse({ status: 401, description: "Invalid refresh token" })
+  @ApiResponse({ status: 401, description: "Invalid or expired refresh token" })
   @ApiResponse({ status: 429, description: "Too many requests" })
   @ApiBody({ type: RefreshDto })
   @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 refresh attempts per minute
   async refresh(@Body(ValidationPipe) refreshDto: RefreshDto) {
     return this.authService.refresh(refreshDto);
+  }
+
+  @Post("debug-token")
+  @ApiOperation({ summary: "Debug refresh token (Development Only)" })
+  @ApiResponse({
+    status: 200,
+    description: "Token debug info",
+  })
+  @ApiBody({
+    schema: {
+      type: "object",
+      properties: {
+        refresh_token: {
+          type: "string",
+          description: "Refresh token to debug"
+        }
+      }
+    }
+  })
+  async debugToken(@Body() body: { refresh_token: string }) {
+    return this.authService.debugRefreshToken(body.refresh_token);
   }
 
   @Post("logout")
