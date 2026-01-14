@@ -198,6 +198,50 @@ export class ProductController {
     return this.productService.getBestSellers();
   }
 
+  @Get('best')
+  @ApiOperation({ summary: 'Get best products (highest purchases + highest ratings combined)' })
+  @ApiResponse({
+    status: 200,
+    description: 'Best products retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        status: {
+          type: 'boolean',
+          description: 'Request success status',
+          example: true
+        },
+        message: {
+          type: 'string',
+          description: 'Response message',
+          example: 'Best products retrieved successfully'
+        },
+        data: {
+          type: 'array',
+          description: 'Array of best product objects (includes computed fields like soldQty, avgRating)',
+          items: {
+            $ref: getSchemaPath(Product),
+            description: 'Best product object with full details'
+          }
+        }
+      }
+    }
+  })
+  @ApiQuery({ name: 'limit', required: false, type: Number, description: 'Number of products to return (default 2)' })
+  @ApiQuery({ name: 'days', required: false, type: Number, description: 'Lookback days for purchase counting (default 30)' })
+  @ApiQuery({ name: 'minReviews', required: false, type: Number, description: 'Minimum approved reviews required (default 3, fallback applies if too strict)' })
+  async getBestProducts(
+    @Query('limit') limit?: string,
+    @Query('days') days?: string,
+    @Query('minReviews') minReviews?: string,
+  ) {
+    return this.productService.getBestProducts({
+      limit: limit ? Number(limit) : undefined,
+      days: days ? Number(days) : undefined,
+      minReviews: minReviews ? Number(minReviews) : undefined,
+    });
+  }
+
   @Get('search')
   @ApiOperation({ summary: 'Search products' })
   @ApiResponse({

@@ -188,8 +188,17 @@ export class AuthExtendedService {
       throw new InternalServerErrorException('Failed to send OTP');
     }
 
+    const isProd = process.env.NODE_ENV === 'production';
+
     return ResponseHelper.success(
-      null,
+      isProd
+        ? null
+        : {
+            otp: otpCode,
+            expires_at: expiresAt,
+            recipient,
+            type,
+          },
       'OTP sent successfully',
       'OTP'
     );
@@ -322,13 +331,15 @@ export class AuthExtendedService {
     }
 
     // Send OTP for password reset
-    await this.sendOtp({
+    const otpResult = await this.sendOtp({
       type: OtpType.PASSWORD_RESET,
       recipient: email
     });
 
+    const isProd = process.env.NODE_ENV === 'production';
+
     return ResponseHelper.success(
-      null,
+      isProd ? null : otpResult.data,
       'OTP sent for password reset. Please check your email.',
       'Password Reset'
     );

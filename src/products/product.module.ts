@@ -7,6 +7,9 @@ import { Category } from '../entities/category.entity';
 import { Brand } from '../entities/brand.entity';
 import { ProductImage } from '../entities/product-image.entity';
 import { Variant } from '../entities/variant.entity';
+import { Order } from '../entities/order.entity';
+import { OrderItem } from '../entities/order-item.entity';
+import { Review } from '../entities/review.entity';
 
 @Module({
   imports: [
@@ -16,6 +19,9 @@ import { Variant } from '../entities/variant.entity';
       Brand,
       ProductImage,
       Variant,
+      Order,
+      OrderItem,
+      Review,
     ]),
   ],
   controllers: [

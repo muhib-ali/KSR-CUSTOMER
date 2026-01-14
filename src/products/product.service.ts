@@ -1,16 +1,24 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Like, Between } from 'typeorm';
+import { Repository } from 'typeorm';
 import { ResponseHelper } from '../common/helpers/response.helper';
 import { ApiResponse } from '../common/interfaces/api-response.interface';
 import { GetProductsDto } from './dto/get-products.dto';
 import { Product } from '../entities/product.entity';
+import { OrderItem } from '../entities/order-item.entity';
+import { Review } from '../entities/review.entity';
+import { OrderStatus } from '../entities/order-status.enum';
+import { ReviewStatus } from '../entities/review-status.enum';
 
 @Injectable()
 export class ProductService {
   constructor(
     @InjectRepository(Product)
     private productRepository: Repository<Product>,
+    @InjectRepository(OrderItem)
+    private orderItemRepository: Repository<OrderItem>,
+    @InjectRepository(Review)
+    private reviewRepository: Repository<Review>,
   ) {}
 
   async getAllProducts(query: GetProductsDto): Promise<ApiResponse<any>> {
@@ -276,6 +284,144 @@ export class ProductService {
     return ResponseHelper.success(
       products,
       'Related products retrieved successfully',
+      'Products'
+    );
+  }
+
+  async getBestProducts(options?: {
+    limit?: number;
+    days?: number;
+    minReviews?: number;
+  }): Promise<ApiResponse<any>> {
+    const limit = Math.min(Math.max(options?.limit ?? 2, 1), 20);
+    const days = Math.min(Math.max(options?.days ?? 30, 1), 365);
+    const minReviews = Math.min(Math.max(options?.minReviews ?? 3, 0), 1000);
+
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    // 1) Sold quantity per product from ACCEPTED orders
+    const salesRows = await this.orderItemRepository
+      .createQueryBuilder('oi')
+      .innerJoin('oi.order', 'o')
+      .select('oi.product_id', 'product_id')
+      .addSelect('SUM(oi.quantity)', 'sold_qty')
+      .where('o.status = :status', { status: OrderStatus.ACCEPTED })
+      .andWhere('o.created_at >= :since', { since })
+      .groupBy('oi.product_id')
+      .getRawMany<{ product_id: string; sold_qty: string }>();
+
+    if (!salesRows.length) {
+      return ResponseHelper.success(
+        [],
+        'Best products retrieved successfully',
+        'Products'
+      );
+    }
+
+    const salesMap = new Map<string, number>();
+    let maxSoldQty = 0;
+    for (const r of salesRows) {
+      const soldQty = Number(r.sold_qty ?? 0);
+      salesMap.set(r.product_id, soldQty);
+      if (soldQty > maxSoldQty) maxSoldQty = soldQty;
+    }
+
+    // 2) Ratings per product from APPROVED reviews (all-time; can be changed later)
+    const ratingRows = await this.reviewRepository
+      .createQueryBuilder('rev')
+      .select('rev.product_id', 'product_id')
+      .addSelect('AVG(rev.rating)', 'avg_rating')
+      .addSelect('COUNT(rev.id)', 'review_count')
+      .where('rev.status = :status', { status: ReviewStatus.APPROVED })
+      .andWhere('rev.product_id IN (:...productIds)', {
+        productIds: Array.from(salesMap.keys()),
+      })
+      .groupBy('rev.product_id')
+      .getRawMany<{ product_id: string; avg_rating: string; review_count: string }>();
+
+    const ratingMap = new Map<string, { avg: number; count: number }>();
+    for (const r of ratingRows) {
+      ratingMap.set(r.product_id, {
+        avg: Number(r.avg_rating ?? 0),
+        count: Number(r.review_count ?? 0),
+      });
+    }
+
+    // 3) Compute score
+    const candidates = Array.from(salesMap.entries())
+      .map(([productId, soldQty]) => {
+        const rating = ratingMap.get(productId);
+        const avgRating = rating?.avg ?? 0;
+        const reviewCount = rating?.count ?? 0;
+
+        if (minReviews > 0 && reviewCount < minReviews) return null;
+
+        const salesScore = maxSoldQty > 0 ? soldQty / maxSoldQty : 0;
+        const ratingScore = avgRating / 5;
+        const confidenceScore = minReviews > 0 ? Math.min(1, reviewCount / minReviews) : 1;
+        const score = 0.65 * salesScore + 0.30 * ratingScore + 0.05 * confidenceScore;
+
+        return {
+          productId,
+          soldQty,
+          avgRating,
+          reviewCount,
+          score,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => Boolean(x));
+
+    // Fallback if thresholds are too strict
+    const finalCandidates = candidates.length
+      ? candidates
+      : Array.from(salesMap.entries()).map(([productId, soldQty]) => ({
+          productId,
+          soldQty,
+          avgRating: ratingMap.get(productId)?.avg ?? 0,
+          reviewCount: ratingMap.get(productId)?.count ?? 0,
+          score: maxSoldQty > 0 ? soldQty / maxSoldQty : 0,
+        }));
+
+    finalCandidates.sort((a, b) =>
+      b.score - a.score ||
+      b.soldQty - a.soldQty ||
+      b.avgRating - a.avgRating ||
+      b.reviewCount - a.reviewCount
+    );
+
+    const top = finalCandidates.slice(0, limit);
+    const topIds = top.map((t) => t.productId);
+
+    // 4) Fetch product details
+    const products = await this.productRepository
+      .createQueryBuilder('product')
+      .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.brand', 'brand')
+      .leftJoinAndSelect('product.images', 'images')
+      .where('product.id IN (:...ids)', { ids: topIds })
+      .andWhere('product.stock_quantity > 0')
+      .getMany();
+
+    const productMap = new Map(products.map((p) => [p.id, p]));
+    const result = top
+      .map((t) => {
+        const product = productMap.get(t.productId);
+        if (!product) return null;
+        return {
+          ...product,
+          soldQty: t.soldQty,
+          avgRating: Number(t.avgRating.toFixed(2)),
+          reviewCount: t.reviewCount,
+          score: Number(t.score.toFixed(4)),
+          isHot: true,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => Boolean(x));
+
+    return ResponseHelper.success(
+      result,
+      'Best products retrieved successfully',
       'Products'
     );
   }

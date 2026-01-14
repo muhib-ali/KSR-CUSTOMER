@@ -130,7 +130,25 @@ export class AuthExtendedController {
   })
   @ApiResponse({
     status: 200,
-    description: 'OTP sent successfully',
+    description: 'OTP sent successfully (Development Only - OTP returned in response)',
+    schema: {
+      example: {
+        statusCode: 200,
+        status: true,
+        message: 'OTP sent successfully',
+        heading: 'OTP',
+        data: {
+          otp: '123456',
+          expires_at: '2026-01-14T19:45:00.000Z',
+          recipient: 'john@example.com',
+          type: 'password_reset'
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP sent successfully (Production - OTP not returned in response)',
     schema: {
       example: {
         statusCode: 200,
@@ -273,7 +291,25 @@ export class AuthExtendedController {
   })
   @ApiResponse({
     status: 200,
-    description: 'OTP sent for password reset',
+    description: 'OTP sent for password reset (Development Only - OTP returned in response)',
+    schema: {
+      example: {
+        statusCode: 200,
+        status: true,
+        message: 'OTP sent for password reset. Please check your email.',
+        heading: 'Password Reset',
+        data: {
+          otp: '123456',
+          expires_at: '2026-01-14T19:45:00.000Z',
+          recipient: 'john@example.com',
+          type: 'password_reset'
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'OTP sent for password reset (Production - OTP not returned in response)',
     schema: {
       example: {
         statusCode: 200,
