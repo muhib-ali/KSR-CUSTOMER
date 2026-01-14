@@ -187,6 +187,7 @@ export class ProductService {
       .leftJoinAndSelect('product.variants', 'variants')
       .where('product.id = :id', { id })
       .andWhere('product.stock_quantity > 0')
+      .orderBy('images.sort_order', 'ASC')
       .getOne();
 
     if (!product) {
@@ -209,6 +210,7 @@ export class ProductService {
       .leftJoinAndSelect('product.variants', 'variants')
       .where('product.slug = :slug', { slug })
       .andWhere('product.stock_quantity > 0')
+      .orderBy('images.sort_order', 'ASC')
       .getOne();
 
     if (!product) {

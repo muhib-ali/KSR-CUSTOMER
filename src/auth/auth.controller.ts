@@ -178,7 +178,7 @@ export class AuthController {
     return this.authService.logout(token);
   }
 
-  @Post("change-password")
+  @Put("change-password")
   @ApiOperation({
     summary: "Change password",
     description: "Change the authenticated user's password by providing current password and a new password."

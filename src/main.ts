@@ -10,10 +10,10 @@ async function bootstrap() {
 
   // Enable CORS
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002'], // Add your frontend URLs
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3007'], // Add your frontend URLs
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
   });
 
   // Add raw body parser for debugging
@@ -84,7 +84,7 @@ async function bootstrap() {
     customSiteTitle: "KSR Customer API Documentation",
   });
 
-  const port = process.env.APP_PORT || 3000;
+  const port = process.env.APP_PORT || 3002;
   await app.listen(port);
 
   logger.log(`🚀 Application is running on: http://localhost:${port}`);
