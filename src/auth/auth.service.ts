@@ -51,11 +51,22 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
+    // Assign default role_id (shared DB uses roles table)
+    const roleRows = await this.customerRepository.manager.query(
+      `SELECT id FROM roles WHERE slug = $1 LIMIT 1`,
+      ['customer']
+    );
+    const customerRoleId = roleRows?.[0]?.id as string | undefined;
+    if (!customerRoleId) {
+      throw new BadRequestException('Customer role not found. Please seed roles and try again.');
+    }
+
     const customer = this.customerRepository.create({
       fullname,
       username,
       email,
       password: hashedPassword,
+      role_id: customerRoleId,
       phone: phone || null,
       is_email_verified: false,
       is_phone_verified: false,
