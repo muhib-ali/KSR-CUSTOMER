@@ -43,6 +43,34 @@ export class OrderItemResponseDto {
     example: 199.98,
   })
   total_price: number;
+
+  @ApiProperty({
+    description: "Requested price per unit (bulk orders)",
+    example: 85.0,
+    required: false,
+  })
+  requested_price_per_unit?: number;
+
+  @ApiProperty({
+    description: "Offered price per unit (bulk orders)",
+    example: 90.0,
+    required: false,
+  })
+  offered_price_per_unit?: number;
+
+  @ApiProperty({
+    description: "Minimum quantity for bulk pricing",
+    example: 10,
+    required: false,
+  })
+  bulk_min_quantity?: number;
+
+  @ApiProperty({
+    description: "Item approval status for bulk orders: pending, accepted, rejected",
+    example: "pending",
+    required: false,
+  })
+  item_status?: string;
 }
 
 export class OrderResponseDto {
@@ -156,6 +184,12 @@ export class OrderResponseDto {
     required: false,
   })
   notes: string;
+
+  @ApiProperty({
+    description: "Order type",
+    example: "regular",
+  })
+  order_type: string;
 
   @ApiProperty({
     description: "Order items",

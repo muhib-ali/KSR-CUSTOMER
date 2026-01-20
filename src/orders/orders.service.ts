@@ -46,7 +46,22 @@ export class OrdersService {
     // 2. Validate cart items and get complete product details
     const validatedItems = await this.validateCartItems(createOrderDto.items, userId);
 
-    // 3. Calculate totals and get promo code details if provided
+    // 3. Determine order type from cart (do not trust request body)
+    const uniqueCartTypes = Array.from(
+      new Set(
+        validatedItems
+          .map((i) => (i.cart_type || 'regular').toString())
+          .filter((t) => t)
+      )
+    );
+
+    if (uniqueCartTypes.length > 1) {
+      throw new BadRequestException('Cart contains mixed item types. Please clear your cart and try again.');
+    }
+
+    const orderType = uniqueCartTypes[0] === 'bulk' ? 'bulk' : 'regular';
+
+    // 4. Calculate totals and get promo code details if provided
     let promoCodeId = null;
     const { subtotal, discount, total } = await this.calculateTotals(
       validatedItems,
@@ -59,10 +74,10 @@ export class OrdersService {
       promoCodeId = promo.id;
     }
 
-    // 4. Generate order number
+    // 5. Generate order number
     const orderNumber = this.generateOrderNumber();
 
-    // 5. Create order with user info (secure)
+    // 6. Create order with user info (secure)
     const order = this.orderRepository.create({
       user_id: userId,
       order_number: orderNumber,
@@ -86,14 +101,15 @@ export class OrdersService {
       total_amount: total,
       promo_code_id: promoCodeId,
       status: OrderStatus.PENDING,
-      notes: createOrderDto.notes || ''
+      notes: createOrderDto.notes || '',
+      order_type: orderType
     });
 
     // 6. Save order
     const savedOrder = await this.orderRepository.save(order);
 
     // 7. Create order items with validated product data
-    const orderItems = await this.createOrderItems(savedOrder.id, validatedItems);
+    const orderItems = await this.createOrderItems(savedOrder.id, validatedItems, orderType);
 
     // 8. Handle promo code usage (if applicable)
     if (createOrderDto.promo_code) {
@@ -232,7 +248,12 @@ export class OrdersService {
       }
 
       // Calculate prices from product data
-      const unitPrice = product.total_price; // Tax-inclusive price from product
+      // For bulk cart items we rely on the offered price stored on cart, otherwise fall back to product price
+      const offeredPrice = item.offered_price_per_unit ?? cartItem.offered_price_per_unit;
+      const requestedPrice = item.requested_price_per_unit ?? cartItem.requested_price_per_unit;
+      const bulkMinQty = item.bulk_min_quantity ?? cartItem.bulk_min_quantity;
+
+      const unitPrice = offeredPrice ?? product.total_price; // Tax-inclusive price from product
       const totalPrice = cartItem.quantity * unitPrice;
 
       validatedItems.push({
@@ -241,7 +262,11 @@ export class OrdersService {
         product_sku: product.sku || '',
         quantity: cartItem.quantity,
         unit_price: unitPrice,
-        total_price: totalPrice
+        total_price: totalPrice,
+        cart_type: cartItem.type || 'regular',
+        requested_price_per_unit: requestedPrice,
+        offered_price_per_unit: offeredPrice,
+        bulk_min_quantity: bulkMinQty
       });
     }
 
@@ -331,7 +356,7 @@ export class OrdersService {
     return `ORD-${timestamp}-${random}`;
   }
 
-  private async createOrderItems(orderId: string, items: any[]): Promise<OrderItem[]> {
+  private async createOrderItems(orderId: string, items: any[], orderType: string): Promise<OrderItem[]> {
     const orderItems = [];
 
     for (const item of items) {
@@ -342,7 +367,11 @@ export class OrdersService {
         product_sku: item.product_sku || '',
         quantity: item.quantity,
         unit_price: item.unit_price,
-        total_price: item.total_price
+        total_price: item.total_price,
+        requested_price_per_unit: item.requested_price_per_unit,
+        offered_price_per_unit: item.offered_price_per_unit,
+        bulk_min_quantity: item.bulk_min_quantity,
+        item_status: orderType === 'bulk' ? 'pending' : 'accepted'
       });
 
       orderItems.push(await this.orderItemRepository.save(orderItem));

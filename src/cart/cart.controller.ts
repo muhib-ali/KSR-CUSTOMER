@@ -10,6 +10,7 @@ import {
   Request,
   ValidationPipe,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import {
   ApiTags,
   ApiOperation,
@@ -55,6 +56,10 @@ class CartResponseDto {
 class AddToCartRequestDto {
   product_id: string;
   quantity: number;
+  type?: string;
+  requested_price_per_unit?: number;
+  offered_price_per_unit?: number;
+  bulk_min_quantity?: number;
 }
 
 class UpdateCartRequestDto {
@@ -69,6 +74,7 @@ export class CartController {
   constructor(private readonly cartService: CartService) {}
 
   @Get()
+  @SkipThrottle()
   @ApiOperation({ 
     summary: 'Get customer cart',
     description: 'Retrieve all items in the authenticated customer\'s shopping cart'
@@ -134,6 +140,7 @@ export class CartController {
   }
 
   @Post('add')
+  @SkipThrottle()
   @ApiOperation({ 
     summary: 'Add item to cart',
     description: 'Add a product to the authenticated customer\'s shopping cart'
@@ -141,11 +148,22 @@ export class CartController {
   @ApiBody({ 
     type: AddToCartRequestDto,
     examples: {
-      example1: {
-        summary: 'Add 2 items to cart',
+      regular: {
+        summary: 'Add regular item to cart',
         value: {
           product_id: '456e7890-e89b-12d3-a456-426614174001',
           quantity: 2
+        }
+      },
+      bulk: {
+        summary: 'Add bulk item to cart',
+        value: {
+          product_id: '7f51ed58-7833-4b2d-b0a8-73789106b9dc',
+          quantity: 15,
+          type: 'bulk',
+          requested_price_per_unit: 70.00,
+          offered_price_per_unit: 80.00,
+          bulk_min_quantity: 10
         }
       }
     }
@@ -191,6 +209,7 @@ export class CartController {
   }
 
   @Put('update/:cartItemId')
+  @SkipThrottle()
   @ApiOperation({ 
     summary: 'Update cart item quantity',
     description: 'Update the quantity of an existing item in the cart. Set quantity to 0 to remove the item.'
@@ -282,6 +301,7 @@ export class CartController {
   }
 
   @Delete('remove/:cartItemId')
+  @SkipThrottle()
   @ApiOperation({ 
     summary: 'Remove item from cart',
     description: 'Remove an item from the authenticated customer\'s shopping cart'
@@ -332,6 +352,7 @@ export class CartController {
   }
 
   @Delete('clear')
+  @SkipThrottle()
   @ApiOperation({ 
     summary: 'Clear entire cart',
     description: 'Remove all items from the authenticated customer\'s shopping cart'

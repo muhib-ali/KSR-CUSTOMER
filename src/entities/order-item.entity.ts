@@ -28,6 +28,18 @@ export class OrderItem extends BaseAuditColumns {
   @Column({ type: "decimal", precision: 10, scale: 2 })
   total_price: number;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  requested_price_per_unit: number;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  offered_price_per_unit: number;
+
+  @Column({ type: "int", nullable: true })
+  bulk_min_quantity: number;
+
+  @Column({ type: "varchar", length: 20, nullable: true, default: "pending" })
+  item_status: string;
+
   // Relationships
   @ManyToOne(() => Order, order => order.order_items)
   @JoinColumn({ name: "order_id" })

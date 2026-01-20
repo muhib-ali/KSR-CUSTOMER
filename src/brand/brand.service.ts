@@ -15,14 +15,12 @@ export class BrandService {
   async getAllBrands(): Promise<ApiResponse<any>> {
     const brands = await this.brandRepository
       .createQueryBuilder('brand')
-      .leftJoinAndSelect('brand.products', 'products')
-      .where('products.stock_quantity > 0')
-      .orWhere('products.id IS NULL')
+      .where('brand.is_active = :isActive', { isActive: true })
       .orderBy('brand.name', 'ASC')
       .getMany();
 
     return ResponseHelper.success(
-      brands,
+      { brands },
       'Brands retrieved successfully',
       'Brands'
     );

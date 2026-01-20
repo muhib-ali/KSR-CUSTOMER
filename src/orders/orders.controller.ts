@@ -79,6 +79,7 @@ export class OrdersController {
             promo_code_id: null,
             status: "pending",
             notes: "Please deliver after 5 PM. Call before arrival.",
+            order_type: "regular",
             created_at: "2024-01-06T20:00:00.000Z",
             updated_at: "2024-01-06T20:00:00.000Z"
           },
@@ -90,7 +91,8 @@ export class OrdersController {
               product_sku: "PH-001",
               quantity: 2,
               unit_price: 99.99,
-              total_price: 199.98
+              total_price: 199.98,
+              item_status: "accepted"
             },
             {
               id: "item-uuid-2",
@@ -99,7 +101,8 @@ export class OrdersController {
               product_sku: "WM-002",
               quantity: 1,
               unit_price: 29.99,
-              total_price: 29.99
+              total_price: 29.99,
+              item_status: "accepted"
             }
           ]
         }
@@ -147,7 +150,6 @@ export class OrdersController {
               cart_id: "456e7890-e89b-12d3-a456-426614174111"
             }
           ],
-          promo_code: "SAVE10",
           address: "123 Main Street, Apt 4B, Building 5",
           city: "New York",
           state: "NY",
@@ -156,29 +158,36 @@ export class OrdersController {
           notes: "Please deliver after 5 PM. Call before arrival."
         }
       },
-      simple: {
-        summary: 'Simple order with single cart item',
+      bulk: {
+        summary: 'Bulk order with custom pricing',
         value: {
+          order_type: "bulk",
           items: [
             {
-              cart_id: "123e4567-e89b-12d3-a456-426614174000"
+              cart_id: "123e4567-e89b-12d3-a456-426614174000",
+              requested_price_per_unit: 85.00,
+              offered_price_per_unit: 90.00,
+              bulk_min_quantity: 10
+            },
+            {
+              cart_id: "456e7890-e89b-12d3-a456-426614174111",
+              requested_price_per_unit: 75.00,
+              offered_price_per_unit: 80.00,
+              bulk_min_quantity: 20
             }
           ],
-          address: "456 Oak Avenue",
+          address: "456 Business Park, Suite 100",
           city: "Los Angeles",
           state: "CA",
-          zip_code: "90210",
-          country: "USA"
+          zip_code: "90001",
+          country: "USA",
+          notes: "Bulk order for workshop - please confirm pricing"
         }
       }
     }
   })
-  async createOrder(
-    @Request() req: any,
-    @Body(ValidationPipe) createOrderDto: CreateOrderDto
-  ): Promise<CustomApiResponse<any>> {
-    const userId = req.user.id;
-    return await this.ordersService.createOrder(userId, createOrderDto);
+  async createOrder(@Request() req: any, @Body(ValidationPipe) createOrderDto: CreateOrderDto): Promise<CustomApiResponse<any>> {
+    return this.ordersService.createOrder(req.user.id, createOrderDto);
   }
 
   @Get('my-orders')

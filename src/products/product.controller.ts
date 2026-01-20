@@ -4,8 +4,9 @@ import {
   Param, 
   Query, 
   ValidationPipe,
-  NotFoundException 
+  NotFoundException
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import { 
   ApiTags, 
   ApiOperation, 
@@ -544,5 +545,89 @@ export class ProductController {
   @ApiParam({ name: 'id', description: 'Product ID' })
   async getRelatedProducts(@Param('id') id: string) {
     return this.productService.getRelatedProducts(id);
+  }
+
+  @Get('bulk-pricing/:productId')
+  @SkipThrottle()
+  @ApiOperation({ summary: 'Get bulk pricing for a product' })
+  @ApiResponse({
+    status: 200,
+    description: 'Bulk pricing retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Bulk pricing retrieved successfully' },
+        data: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              id: { type: 'string', example: '123e4567-e89b-12d3-a456-426614174000' },
+              quantity: { type: 'integer', example: 10 },
+              price_per_product: { type: 'number', example: 90.00 },
+              product_id: { type: 'string', example: '456e7890-e89b-12d3-a456-426614174111' }
+            }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Product not found',
+  })
+  @ApiParam({ name: 'productId', description: 'Product ID' })
+  async getProductBulkPricing(@Param('productId') productId: string) {
+    return this.productService.getProductBulkPricing(productId);
+  }
+
+  @Get('sku/:sku/bulk-pricing')
+  @SkipThrottle()
+  @ApiOperation({ summary: 'Get product with bulk pricing by SKU' })
+  @ApiResponse({
+    status: 200,
+    description: 'Product with bulk pricing retrieved successfully',
+    schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'boolean', example: true },
+        message: { type: 'string', example: 'Product with bulk pricing retrieved successfully' },
+        data: {
+          type: 'object',
+          properties: {
+            product: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', example: '123e4567-e89b-12d3-a456-426614174000' },
+                title: { type: 'string', example: 'Garrett Turbo' },
+                sku: { type: 'string', example: 'TRB-GTX3582R' },
+                price: { type: 'number', example: 100.00 },
+                stock_quantity: { type: 'integer', example: 50 }
+              }
+            },
+            bulkPricing: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string', example: '789e0123-e89b-12d3-a456-426614174222' },
+                  quantity: { type: 'integer', example: 10 },
+                  price_per_product: { type: 'number', example: 90.00 }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Product not found',
+  })
+  @ApiParam({ name: 'sku', description: 'Product SKU' })
+  async getProductWithBulkPricingBySku(@Param('sku') sku: string) {
+    return this.productService.getProductWithBulkPricingBySku(sku);
   }
 }

@@ -7,6 +7,7 @@ import { GetProductsDto } from './dto/get-products.dto';
 import { Product } from '../entities/product.entity';
 import { OrderItem } from '../entities/order-item.entity';
 import { Review } from '../entities/review.entity';
+import { BulkPrice } from '../entities/bulk-price.entity';
 import { OrderStatus } from '../entities/order-status.enum';
 import { ReviewStatus } from '../entities/review-status.enum';
 
@@ -19,6 +20,8 @@ export class ProductService {
     private orderItemRepository: Repository<OrderItem>,
     @InjectRepository(Review)
     private reviewRepository: Repository<Review>,
+    @InjectRepository(BulkPrice)
+    private bulkPriceRepository: Repository<BulkPrice>,
   ) {}
 
   async getAllProducts(query: GetProductsDto): Promise<ApiResponse<any>> {
@@ -52,28 +55,62 @@ export class ProductService {
 
     // Apply filters
     if (category) {
-      queryBuilder.andWhere('category.slug = :category', { category });
+      // Check if it's a UUID format (contains hyphens and length > 20)
+      if (category.includes('-') && category.length > 20) {
+        // It's a UUID, filter by ID
+        queryBuilder.andWhere('category.id = :categoryId', { categoryId: category });
+      } else {
+        // It's a name, filter by name
+        queryBuilder.andWhere('category.name = :categoryName', { categoryName: category });
+      }
     }
 
     if (brand) {
-      const brandSlugs = brand
+      const brandValues = brand
         .split(',')
         .map((b) => b.trim())
         .filter(Boolean);
 
-      if (brandSlugs.length === 1) {
-        queryBuilder.andWhere('brand.slug = :brand', { brand: brandSlugs[0] });
-      } else if (brandSlugs.length > 1) {
-        queryBuilder.andWhere('brand.slug IN (:...brands)', { brands: brandSlugs });
+      if (brandValues.length === 1) {
+        const brandValue = brandValues[0];
+        // Check if it's a UUID format (contains hyphens and length > 20)
+        if (brandValue.includes('-') && brandValue.length > 20) {
+          // It's a UUID, cast it properly
+          queryBuilder.andWhere('brand.id = :brandId', { brandId: brandValue });
+        } else {
+          // It's a name, filter by name
+          queryBuilder.andWhere('brand.name = :brandName', { brandName: brandValue });
+        }
+      } else if (brandValues.length > 1) {
+        // Separate UUIDs and names
+        const uuids = brandValues.filter(v => v.includes('-') && v.length > 20);
+        const names = brandValues.filter(v => !v.includes('-') || v.length <= 20);
+        
+        const conditions = [];
+        const parameters: any = {};
+        
+        if (uuids.length > 0) {
+          conditions.push('brand.id IN (:...brandIds)');
+          parameters.brandIds = uuids;
+        }
+        
+        if (names.length > 0) {
+          conditions.push('brand.name IN (:...brandNames)');
+          parameters.brandNames = names;
+        }
+        
+        if (conditions.length > 0) {
+          queryBuilder.andWhere(`(${conditions.join(' OR ')})`, parameters);
+        }
       }
     }
 
     if (minPrice !== undefined) {
-      queryBuilder.andWhere('product.price >= :minPrice', { minPrice });
+      queryBuilder.andWhere('CAST(product.price AS DECIMAL) >= :minPrice', { minPrice });
     }
 
     if (maxPrice !== undefined) {
-      queryBuilder.andWhere('product.price <= :maxPrice', { maxPrice });
+      queryBuilder.andWhere('CAST(product.price AS DECIMAL) <= :maxPrice', { maxPrice });
     }
 
     if (search) {
@@ -141,19 +178,55 @@ export class ProductService {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
+    // Get products first, then manually load images
     const products = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
       .leftJoinAndSelect('product.brand', 'brand')
-      .leftJoinAndSelect('product.images', 'images')
       .where('product.created_at >= :thirtyDaysAgo', { thirtyDaysAgo })
       .andWhere('product.stock_quantity > 0')
       .orderBy('product.created_at', 'DESC')
       .limit(8)
       .getMany();
 
+    // Load images for each product separately
+    const productIds = products.map(p => p.id);
+    const images = await this.productRepository
+      .createQueryBuilder('product')
+      .leftJoin('product.images', 'images')
+      .select(['product.id', 'images.id', 'images.url', 'images.file_name', 'images.sort_order'])
+      .where('product.id IN (:...productIds)', { productIds })
+      .orderBy('images.sort_order', 'ASC')
+      .getRawMany();
+
+    // Group images by product ID
+    const imagesByProduct = {};
+    images.forEach(img => {
+      if (!imagesByProduct[img.product_id]) {
+        imagesByProduct[img.product_id] = [];
+      }
+      imagesByProduct[img.product_id].push({
+        id: img.id,
+        url: img.url,
+        file_name: img.file_name,
+        sort_order: img.sort_order,
+        product_id: img.product_id,
+        is_active: true,
+        created_by: null,
+        updated_by: null,
+        created_at: new Date(),
+        updated_at: new Date()
+      });
+    });
+
+    // Attach images to products
+    const productsWithImages = products.map(product => ({
+      ...product,
+      images: imagesByProduct[product.id] || []
+    }));
+
     return ResponseHelper.success(
-      products,
+      productsWithImages,
       'New arrivals retrieved successfully',
       'Products'
     );
@@ -179,46 +252,134 @@ export class ProductService {
   }
 
   async getProductById(id: string): Promise<ApiResponse<any>> {
+    // Get product first, then manually load images
     const product = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
       .leftJoinAndSelect('product.brand', 'brand')
-      .leftJoinAndSelect('product.images', 'images')
       .leftJoinAndSelect('product.variants', 'variants')
       .where('product.id = :id', { id })
-      .andWhere('product.stock_quantity > 0')
-      .orderBy('images.sort_order', 'ASC')
       .getOne();
 
     if (!product) {
       throw new NotFoundException('Product not found');
     }
 
+    // Load images for this product separately
+    const images = await this.productRepository
+      .createQueryBuilder('product')
+      .leftJoin('product.images', 'images')
+      .select([
+        'product.id as product_id',
+        'images.id as id',
+        'images.url as url',
+        'images.file_name as file_name',
+        'images.sort_order as sort_order',
+        'images.is_active as is_active',
+        'images.created_by as created_by',
+        'images.updated_by as updated_by',
+        'images.created_at as created_at',
+        'images.updated_at as updated_at'
+      ])
+      .where('product.id = :id', { id })
+      .orderBy('images.sort_order', 'ASC')
+      .getRawMany();
+
+    // Group images by product ID
+    const imagesByProduct = {};
+    images.forEach(img => {
+      if (!imagesByProduct[img.product_id]) {
+        imagesByProduct[img.product_id] = [];
+      }
+      imagesByProduct[img.product_id].push({
+        id: img.id,
+        url: img.url,
+        file_name: img.file_name,
+        sort_order: img.sort_order,
+        product_id: img.product_id,
+        is_active: img.is_active,
+        created_by: img.created_by,
+        updated_by: img.updated_by,
+        created_at: img.created_at,
+        updated_at: img.updated_at
+      });
+    });
+
+    // Attach images to product
+    const productWithImages = {
+      ...product,
+      images: imagesByProduct[product.id] || []
+    };
+
     return ResponseHelper.success(
-      product,
+      productWithImages,
       'Product retrieved successfully',
       'Products'
     );
   }
 
   async getProductBySlug(slug: string): Promise<ApiResponse<any>> {
+    // Get product first, then manually load images (using id as slug since slug field doesn't exist)
     const product = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
       .leftJoinAndSelect('product.brand', 'brand')
-      .leftJoinAndSelect('product.images', 'images')
       .leftJoinAndSelect('product.variants', 'variants')
-      .where('product.slug = :slug', { slug })
-      .andWhere('product.stock_quantity > 0')
-      .orderBy('images.sort_order', 'ASC')
+      .where('product.id = :slug', { slug })
       .getOne();
 
     if (!product) {
       throw new NotFoundException('Product not found');
     }
 
+    // Load images for this product separately
+    const images = await this.productRepository
+      .createQueryBuilder('product')
+      .leftJoin('product.images', 'images')
+      .select([
+        'product.id as product_id',
+        'images.id as id',
+        'images.url as url',
+        'images.file_name as file_name',
+        'images.sort_order as sort_order',
+        'images.is_active as is_active',
+        'images.created_by as created_by',
+        'images.updated_by as updated_by',
+        'images.created_at as created_at',
+        'images.updated_at as updated_at'
+      ])
+      .where('product.id = :id', { id: product.id })
+      .orderBy('images.sort_order', 'ASC')
+      .getRawMany();
+
+    // Group images by product ID
+    const imagesByProduct = {};
+    images.forEach(img => {
+      if (!imagesByProduct[img.product_id]) {
+        imagesByProduct[img.product_id] = [];
+      }
+      imagesByProduct[img.product_id].push({
+        id: img.id,
+        url: img.url,
+        file_name: img.file_name,
+        sort_order: img.sort_order,
+        product_id: img.product_id,
+        is_active: img.is_active,
+        created_by: img.created_by,
+        updated_by: img.updated_by,
+        created_at: img.created_at,
+        updated_at: img.updated_at
+      });
+    });
+
+    // Attach images to product
+    const productWithImages = {
+      ...product,
+      images: imagesByProduct[product.id] || []
+    };
+
     return ResponseHelper.success(
-      product,
+      productWithImages,
       'Product retrieved successfully',
       'Products'
     );
@@ -425,6 +586,51 @@ export class ProductService {
       result,
       'Best products retrieved successfully',
       'Products'
+    );
+  }
+
+  async getProductBulkPricing(productId: string): Promise<ApiResponse<any>> {
+    const bulkPrices = await this.bulkPriceRepository
+      .createQueryBuilder('bulk_price')
+      .where('bulk_price.product_id = :productId', { productId })
+      .andWhere('bulk_price.is_active = :isActive', { isActive: true })
+      .orderBy('bulk_price.quantity', 'ASC')
+      .getMany();
+
+    return ResponseHelper.success(
+      bulkPrices,
+      'Bulk pricing retrieved successfully',
+      'Bulk Pricing'
+    );
+  }
+
+  async getProductWithBulkPricingBySku(sku: string): Promise<ApiResponse<any>> {
+    const product = await this.productRepository
+      .createQueryBuilder('product')
+      .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.brand', 'brand')
+      .leftJoinAndSelect('product.images', 'images')
+      .where('product.sku = :sku', { sku })
+      .getOne();
+
+    if (!product) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const bulkPrices = await this.bulkPriceRepository
+      .createQueryBuilder('bulk_price')
+      .where('bulk_price.product_id = :productId', { productId: product.id })
+      .andWhere('bulk_price.is_active = :isActive', { isActive: true })
+      .orderBy('bulk_price.quantity', 'ASC')
+      .getMany();
+
+    return ResponseHelper.success(
+      {
+        product,
+        bulkPricing: bulkPrices,
+      },
+      'Product with bulk pricing retrieved successfully',
+      'Product'
     );
   }
 }
