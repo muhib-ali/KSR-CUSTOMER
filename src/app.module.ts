@@ -18,6 +18,7 @@ import { WishlistModule } from "./wishlist/wishlist.module";
 import { OrdersModule } from "./orders/orders.module";
 import { PromoCodeModule } from "./promo-codes/promo-code.module";
 import { ReviewsModule } from "./reviews/reviews.module";
+import {CurrencyModule} from './currency/currency.module'
 import { GlobalExceptionFilter } from "./filters/global-exception.filter";
 import { ThrottlerGuard } from "@nestjs/throttler";
 
@@ -84,6 +85,7 @@ import { ThrottlerGuard } from "@nestjs/throttler";
     OrdersModule,
     PromoCodeModule,
     ReviewsModule,
+    CurrencyModule,
   ],
   providers: [
     // Global exception filter
