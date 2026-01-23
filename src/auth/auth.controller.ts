@@ -24,6 +24,8 @@ import { RegisterDto } from "./dto/register.dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { EditProfileDto } from "./dto/edit-profile.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { SendPhoneOtpDto } from "./dto/send-phone-otp.dto";
+import { VerifyPhoneOtpDto } from "./dto/verify-phone-otp.dto";
 
 @ApiTags("Authentication")
 @Controller("auth")
@@ -366,5 +368,67 @@ export class AuthController {
   })
   async editProfile(@Request() req, @Body(ValidationPipe) editProfileDto: EditProfileDto) {
     return this.authService.editProfile(req.user.id, editProfileDto);
+  }
+
+  @Post("send-phone-otp")
+  @ApiOperation({ 
+    summary: "Send OTP to phone number",
+    description: "Send a 6-digit OTP to the provided phone number for verification"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "OTP sent successfully",
+    schema: {
+      example: {
+        statusCode: 200,
+        status: true,
+        message: "OTP sent successfully",
+        heading: "Phone Verification",
+        data: {
+          otp: "123456" // Only for testing, remove in production
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: "Bad request" })
+  @ApiResponse({ status: 429, description: "Too many requests" })
+  @ApiBody({ 
+    type: SendPhoneOtpDto,
+    description: "Send OTP request"
+  })
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 OTP requests per minute
+  async sendPhoneOtp(@Body(ValidationPipe) sendPhoneOtpDto: SendPhoneOtpDto) {
+    return this.authService.sendPhoneOtp(sendPhoneOtpDto);
+  }
+
+  @Post("verify-phone-otp")
+  @ApiOperation({ 
+    summary: "Verify phone number with OTP",
+    description: "Verify the phone number using the 6-digit OTP sent to the phone"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Phone verified successfully",
+    schema: {
+      example: {
+        statusCode: 200,
+        status: true,
+        message: "Phone number verified successfully",
+        heading: "Phone Verification",
+        data: {
+          is_phone_verified: true
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: "Invalid or expired OTP" })
+  @ApiResponse({ status: 429, description: "Too many requests" })
+  @ApiBody({ 
+    type: VerifyPhoneOtpDto,
+    description: "Verify OTP request"
+  })
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 verification attempts per minute
+  async verifyPhoneOtp(@Body(ValidationPipe) verifyPhoneOtpDto: VerifyPhoneOtpDto) {
+    return this.authService.verifyPhoneOtp(verifyPhoneOtpDto);
   }
 }

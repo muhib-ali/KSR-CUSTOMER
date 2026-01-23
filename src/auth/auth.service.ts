@@ -15,6 +15,8 @@ import { RegisterDto } from "./dto/register.dto";
 import { RefreshDto } from "./dto/refresh.dto";
 import { EditProfileDto } from "./dto/edit-profile.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { SendPhoneOtpDto } from "./dto/send-phone-otp.dto";
+import { VerifyPhoneOtpDto } from "./dto/verify-phone-otp.dto";
 import { CacheService } from "../cache/cache.service";
 import { AppConfigService } from "../config/config.service";
 import { ResponseHelper } from "../common/helpers/response.helper";
@@ -23,6 +25,9 @@ import { ApiResponse } from "../common/interfaces/api-response.interface";
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  // Fallback in-memory storage for OTPs (temporary fix)
+  private otpStorage: Map<string, { otp: string; expiresAt: number }> = new Map();
+  private phoneVerificationStorage: Map<string, { verified: boolean; expiresAt: number }> = new Map();
 
   constructor(
     @InjectRepository(Customer)
@@ -49,6 +54,50 @@ export class AuthService {
       throw new BadRequestException("Username already exists");
     }
 
+    // Check if phone is verified (if phone is provided)
+    let isPhoneVerified = false;
+    if (phone) {
+      const verifiedPhoneKey = `verified_phone_${phone}`;
+      this.logger.log(`Checking phone verification for ${phone} with key: ${verifiedPhoneKey}`);
+      
+      let phoneVerificationStatus: boolean | undefined;
+      
+      // Try cache first
+      try {
+        phoneVerificationStatus = await this.cacheService.get(verifiedPhoneKey);
+        this.logger.log(`Phone verification status from cache: ${phoneVerificationStatus}`);
+      } catch (cacheError) {
+        this.logger.warn(`Cache retrieval failed for phone verification, using fallback: ${cacheError.message}`);
+      }
+      
+      // Fallback to in-memory storage
+      if (!phoneVerificationStatus) {
+        const memoryData = this.phoneVerificationStorage.get(verifiedPhoneKey);
+        if (memoryData && memoryData.expiresAt > Date.now()) {
+          phoneVerificationStatus = memoryData.verified;
+          this.logger.log(`Phone verification status from fallback memory: ${phoneVerificationStatus}`);
+        } else if (memoryData) {
+          this.logger.log(`Phone verification expired in fallback memory`);
+          this.phoneVerificationStorage.delete(verifiedPhoneKey);
+        }
+      }
+      
+      if (!phoneVerificationStatus) {
+        this.logger.error(`Phone not verified: ${phone}`);
+        throw new BadRequestException("Please verify your phone number before registering");
+      }
+      
+      isPhoneVerified = true;
+      // Remove the verification status from cache after successful registration
+      this.logger.log(`Removing phone verification from cache: ${verifiedPhoneKey}`);
+      try {
+        await this.cacheService.del(verifiedPhoneKey);
+      } catch (cacheError) {
+        this.logger.warn(`Cache delete failed for phone verification: ${cacheError.message}`);
+      }
+      this.phoneVerificationStorage.delete(verifiedPhoneKey);
+    }
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Assign default role_id (shared DB uses roles table)
@@ -69,7 +118,7 @@ export class AuthService {
       role_id: customerRoleId,
       phone: phone || null,
       is_email_verified: false,
-      is_phone_verified: false,
+      is_phone_verified: isPhoneVerified, // Only set to true if phone was verified
     });
 
     const savedCustomer = await this.customerRepository.save(customer);
@@ -535,5 +584,119 @@ export class AuthService {
       "Password changed successfully",
       "Authentication"
     );
+  }
+
+  async sendPhoneOtp(sendPhoneOtpDto: SendPhoneOtpDto): Promise<ApiResponse<any>> {
+    const { phone } = sendPhoneOtpDto;
+
+    try {
+      // Generate a 6-digit OTP for testing (in production, use a proper SMS service)
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Store OTP in cache with 5 minutes expiration
+      const cacheKey = `phone_otp_${phone}`;
+      this.logger.log(`Storing OTP for phone ${phone} with key: ${cacheKey}`);
+      
+      // Try cache first
+      try {
+        await this.cacheService.set(cacheKey, otp, 300); // 5 minutes
+      } catch (cacheError) {
+        this.logger.warn(`Cache storage failed, using fallback: ${cacheError.message}`);
+      }
+      
+      // Fallback to in-memory storage
+      const expiresAt = Date.now() + (5 * 60 * 1000); // 5 minutes
+      this.otpStorage.set(cacheKey, { otp, expiresAt });
+      this.logger.log(`OTP stored in fallback memory for phone ${phone}`);
+
+      // For testing purposes, return the OTP in response
+      // In production, you would send this via SMS service
+      this.logger.log(`OTP for phone ${phone}: ${otp}`);
+
+      return ResponseHelper.success(
+        { otp }, // Only for testing, remove in production
+        "OTP sent successfully",
+        "Phone Verification"
+      );
+    } catch (error) {
+      this.logger.error(`Send phone OTP error: ${error.message}`);
+      throw new BadRequestException("Failed to send OTP");
+    }
+  }
+
+  async verifyPhoneOtp(verifyPhoneOtpDto: VerifyPhoneOtpDto): Promise<ApiResponse<any>> {
+    const { phone, otp } = verifyPhoneOtpDto;
+
+    try {
+      // Get OTP from cache
+      const cacheKey = `phone_otp_${phone}`;
+      this.logger.log(`Trying to retrieve OTP for phone ${phone} with key: ${cacheKey}`);
+      
+      let storedOtp: string | undefined;
+      
+      // Try cache first
+      try {
+        storedOtp = await this.cacheService.get(cacheKey);
+        this.logger.log(`Retrieved OTP from cache: ${storedOtp}`);
+      } catch (cacheError) {
+        this.logger.warn(`Cache retrieval failed, using fallback: ${cacheError.message}`);
+      }
+      
+      // Fallback to in-memory storage
+      if (!storedOtp) {
+        const memoryData = this.otpStorage.get(cacheKey);
+        if (memoryData && memoryData.expiresAt > Date.now()) {
+          storedOtp = memoryData.otp;
+          this.logger.log(`Retrieved OTP from fallback memory: ${storedOtp}`);
+        } else if (memoryData) {
+          this.logger.log(`OTP expired in fallback memory`);
+          this.otpStorage.delete(cacheKey);
+        }
+      }
+
+      if (!storedOtp) {
+        this.logger.error(`OTP not found for key: ${cacheKey}`);
+        throw new BadRequestException("OTP expired or not found");
+      }
+
+      if (storedOtp !== otp) {
+        this.logger.error(`OTP mismatch. Expected: ${storedOtp}, Received: ${otp}`);
+        throw new BadRequestException("Invalid OTP");
+      }
+
+      // Mark this phone as verified in cache for registration (not in database yet)
+      // The actual is_phone_verified will be set during registration
+      const verifiedPhoneKey = `verified_phone_${phone}`;
+      this.logger.log(`Marking phone as verified with key: ${verifiedPhoneKey}`);
+      
+      // Try cache first
+      try {
+        await this.cacheService.set(verifiedPhoneKey, true, 600); // 10 minutes for registration
+      } catch (cacheError) {
+        this.logger.warn(`Cache storage failed for verification, using fallback: ${cacheError.message}`);
+      }
+      
+      // Fallback to in-memory storage
+      const verificationExpiresAt = Date.now() + (10 * 60 * 1000); // 10 minutes
+      this.phoneVerificationStorage.set(verifiedPhoneKey, { verified: true, expiresAt: verificationExpiresAt });
+
+      // Remove OTP from cache after successful verification
+      this.logger.log(`Removing OTP from cache: ${cacheKey}`);
+      try {
+        await this.cacheService.del(cacheKey);
+      } catch (cacheError) {
+        this.logger.warn(`Cache delete failed: ${cacheError.message}`);
+      }
+      this.otpStorage.delete(cacheKey);
+
+      return ResponseHelper.success(
+        { is_phone_verified: true, phone_verified_for_registration: true },
+        "Phone number verified successfully. You can now complete registration.",
+        "Phone Verification"
+      );
+    } catch (error) {
+      this.logger.error(`Verify phone OTP error: ${error.message}`);
+      throw error;
+    }
   }
 }

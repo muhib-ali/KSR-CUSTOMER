@@ -78,6 +78,9 @@ export class OrdersService {
     const orderNumber = this.generateOrderNumber();
 
     // 6. Create order with user info (secure)
+    // For regular orders, set status to accepted; for bulk orders, it will be determined based on item statuses
+    const initialOrderStatus = orderType === 'regular' ? OrderStatus.ACCEPTED : OrderStatus.PENDING;
+    
     const order = this.orderRepository.create({
       user_id: userId,
       order_number: orderNumber,
@@ -100,7 +103,7 @@ export class OrdersService {
       discount_amount: discount,
       total_amount: total,
       promo_code_id: promoCodeId,
-      status: OrderStatus.PENDING,
+      status: initialOrderStatus,
       notes: createOrderDto.notes || '',
       order_type: orderType
     });
@@ -111,12 +114,18 @@ export class OrdersService {
     // 7. Create order items with validated product data
     const orderItems = await this.createOrderItems(savedOrder.id, validatedItems, orderType);
 
-    // 8. Handle promo code usage (if applicable)
+    // 8. For bulk orders, update order status based on item statuses
+    if (orderType === 'bulk') {
+      console.log('Updating bulk order status for order:', savedOrder.id);
+      await this.updateBulkOrderStatus(savedOrder.id);
+    }
+
+    // 9. Handle promo code usage (if applicable)
     if (createOrderDto.promo_code) {
       await this.handlePromoCodeUsage(createOrderDto.promo_code);
     }
 
-    // 9. Deduct product quantities
+    // 10. Deduct product quantities
     console.log('About to deduct product quantities...');
     try {
       await this.deductProductQuantities(validatedItems);
@@ -126,7 +135,7 @@ export class OrdersService {
       console.error('Failed to deduct product quantities:', error);
     }
 
-    // 10. Clear cart items after successful order creation
+    // 11. Clear cart items after successful order creation
     try {
       await this.clearCartItems(userId, createOrderDto.items);
     } catch (error) {
@@ -360,6 +369,20 @@ export class OrdersService {
     const orderItems = [];
 
     for (const item of items) {
+      let itemStatus: string;
+      
+      if (orderType === 'regular') {
+        // Regular orders: all items are accepted
+        itemStatus = 'accepted';
+      } else {
+        // Bulk orders: compare offered price with requested price
+        if (item.offered_price_per_unit && item.requested_price_per_unit) {
+          itemStatus = item.offered_price_per_unit === item.requested_price_per_unit ? 'accepted' : 'pending';
+        } else {
+          itemStatus = 'pending'; // fallback if prices are missing
+        }
+      }
+
       const orderItem = this.orderItemRepository.create({
         order_id: orderId,
         product_id: item.product_id,
@@ -371,13 +394,47 @@ export class OrdersService {
         requested_price_per_unit: item.requested_price_per_unit,
         offered_price_per_unit: item.offered_price_per_unit,
         bulk_min_quantity: item.bulk_min_quantity,
-        item_status: orderType === 'bulk' ? 'pending' : 'accepted'
+        item_status: itemStatus
       });
 
       orderItems.push(await this.orderItemRepository.save(orderItem));
     }
 
     return orderItems;
+  }
+
+  private async updateBulkOrderStatus(orderId: string): Promise<void> {
+    console.log('updateBulkOrderStatus method called for order:', orderId);
+    // Get all order items for this order
+    const orderItems = await this.orderItemRepository.find({
+      where: { order_id: orderId }
+    });
+
+    if (orderItems.length === 0) return;
+
+    // Count item statuses
+    const acceptedCount = orderItems.filter(item => item.item_status === 'accepted').length;
+    const pendingCount = orderItems.filter(item => item.item_status === 'pending').length;
+    const totalCount = orderItems.length;
+
+    let newOrderStatus: OrderStatus;
+    
+    if (acceptedCount === totalCount) {
+      // All items accepted
+      newOrderStatus = OrderStatus.ACCEPTED;
+    } else if (acceptedCount === 0) {
+      // All items pending
+      newOrderStatus = OrderStatus.PENDING;
+    } else {
+      // Some items accepted, some pending
+      newOrderStatus = OrderStatus.PARTIALLY_ACCEPTED;
+    }
+
+    // Update the order status
+    await this.orderRepository.update(
+      { id: orderId },
+      { status: newOrderStatus }
+    );
   }
 
   private async handlePromoCodeUsage(promoCode: string): Promise<void> {
