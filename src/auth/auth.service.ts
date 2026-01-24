@@ -17,7 +17,11 @@ import { EditProfileDto } from "./dto/edit-profile.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
 import { SendPhoneOtpDto } from "./dto/send-phone-otp.dto";
 import { VerifyPhoneOtpDto } from "./dto/verify-phone-otp.dto";
+import { SendEmailVerificationDto } from "./dto/send-email-verification.dto";
+import { VerifyEmailTokenDto } from "./dto/verify-email-token.dto";
 import { CacheService } from "../cache/cache.service";
+import { EmailService } from "../common/services/email.service";
+import { v4 as uuidv4 } from 'uuid';
 import { AppConfigService } from "../config/config.service";
 import { ResponseHelper } from "../common/helpers/response.helper";
 import { ApiResponse } from "../common/interfaces/api-response.interface";
@@ -28,6 +32,7 @@ export class AuthService {
   // Fallback in-memory storage for OTPs (temporary fix)
   private otpStorage: Map<string, { otp: string; expiresAt: number }> = new Map();
   private phoneVerificationStorage: Map<string, { verified: boolean; expiresAt: number }> = new Map();
+  private emailVerificationStorage: Map<string, { email: string; verified: boolean; expiresAt: number }> = new Map();
 
   constructor(
     @InjectRepository(Customer)
@@ -36,7 +41,8 @@ export class AuthService {
     private tokenRepository: Repository<CustomerToken>,
     private jwtService: JwtService,
     private cacheService: CacheService,
-    private configService: AppConfigService
+    private configService: AppConfigService,
+    private emailService: EmailService
   ) {}
 
   async register(registerDto: RegisterDto): Promise<ApiResponse<any>> {
@@ -52,6 +58,40 @@ export class AuthService {
     const existingUsername = await this.customerRepository.findOne({ where: { username } });
     if (existingUsername) {
       throw new BadRequestException("Username already exists");
+    }
+
+    // Check if email is verified
+    const verifiedEmailKey = `verified_email_${email}`;
+    this.logger.log(`Checking email verification for ${email} with key: ${verifiedEmailKey}`);
+    
+    let emailVerificationData: any;
+    
+    // Try cache first
+    try {
+      const cachedData = await this.cacheService.get(verifiedEmailKey);
+      if (cachedData) {
+        emailVerificationData = typeof cachedData === 'string' ? JSON.parse(cachedData) : cachedData;
+        this.logger.log(`Email verification status from cache: verified`);
+      }
+    } catch (cacheError) {
+      this.logger.warn(`Cache retrieval failed for email verification, using fallback: ${cacheError.message}`);
+    }
+    
+    // Fallback to in-memory storage
+    if (!emailVerificationData) {
+      const memoryData = this.emailVerificationStorage.get(verifiedEmailKey);
+      if (memoryData && memoryData.expiresAt > Date.now() && memoryData.verified) {
+        emailVerificationData = memoryData;
+        this.logger.log(`Email verification status from fallback memory: verified`);
+      } else if (memoryData) {
+        this.logger.log(`Email verification expired in fallback memory`);
+        this.emailVerificationStorage.delete(verifiedEmailKey);
+      }
+    }
+    
+    if (!emailVerificationData || !emailVerificationData.verified) {
+      this.logger.error(`Email not verified: ${email}`);
+      throw new BadRequestException("Please verify your email address before registering");
     }
 
     // Check if phone is verified (if phone is provided)
@@ -98,6 +138,15 @@ export class AuthService {
       this.phoneVerificationStorage.delete(verifiedPhoneKey);
     }
 
+    // Remove email verification from cache after successful registration
+    this.logger.log(`Removing email verification from cache: ${verifiedEmailKey}`);
+    try {
+      await this.cacheService.del(verifiedEmailKey);
+    } catch (cacheError) {
+      this.logger.warn(`Cache delete failed for email verification: ${cacheError.message}`);
+    }
+    this.emailVerificationStorage.delete(verifiedEmailKey);
+
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Assign default role_id (shared DB uses roles table)
@@ -117,7 +166,7 @@ export class AuthService {
       password: hashedPassword,
       role_id: customerRoleId,
       phone: phone || null,
-      is_email_verified: false,
+      is_email_verified: true, // Set to true since email was verified before registration
       is_phone_verified: isPhoneVerified, // Only set to true if phone was verified
     });
 
@@ -696,6 +745,152 @@ export class AuthService {
       );
     } catch (error) {
       this.logger.error(`Verify phone OTP error: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async sendEmailVerification(sendEmailVerificationDto: SendEmailVerificationDto): Promise<ApiResponse<any>> {
+    const { email } = sendEmailVerificationDto;
+
+    try {
+      // Check if email already exists in database
+      const existingCustomer = await this.customerRepository.findOne({ where: { email } });
+      if (existingCustomer) {
+        throw new BadRequestException("Email already registered");
+      }
+
+      // Generate unique verification token
+      const verificationToken = uuidv4();
+      
+      // Store token in cache with 10 minutes expiration
+      const cacheKey = `email_verification_token_${verificationToken}`;
+      this.logger.log(`Storing verification token for email ${email} with key: ${cacheKey}`);
+      
+      const tokenData = {
+        email,
+        verified: false,
+        expiresAt: Date.now() + (10 * 60 * 1000), // 10 minutes
+      };
+
+      // Try cache first
+      try {
+        await this.cacheService.set(cacheKey, JSON.stringify(tokenData), 600); // 10 minutes
+      } catch (cacheError) {
+        this.logger.warn(`Cache storage failed, using fallback: ${cacheError.message}`);
+      }
+      
+      // Fallback to in-memory storage
+      this.emailVerificationStorage.set(cacheKey, tokenData);
+      this.logger.log(`Verification token stored in fallback memory for email ${email}`);
+
+      // Send verification email via Mailtrap
+      await this.emailService.sendVerificationEmail(email, verificationToken);
+
+      return ResponseHelper.success(
+        { 
+          message: "Verification email sent",
+          email: email 
+        },
+        "Please check your email and click the verification link",
+        "Email Verification"
+      );
+    } catch (error) {
+      this.logger.error(`Send email verification error: ${error.message}`);
+      if (error instanceof BadRequestException) {
+        throw error;
+      }
+      throw new BadRequestException("Failed to send verification email");
+    }
+  }
+
+  async verifyEmailToken(verifyEmailTokenDto: VerifyEmailTokenDto): Promise<ApiResponse<any>> {
+    const { token } = verifyEmailTokenDto;
+
+    try {
+      // Get token data from cache
+      const cacheKey = `email_verification_token_${token}`;
+      this.logger.log(`Trying to retrieve verification token: ${cacheKey}`);
+      
+      let tokenData: any;
+      
+      // Try cache first
+      try {
+        const cachedData = await this.cacheService.get(cacheKey);
+        if (cachedData) {
+          tokenData = typeof cachedData === 'string' ? JSON.parse(cachedData) : cachedData;
+          this.logger.log(`Retrieved token from cache`);
+        }
+      } catch (cacheError) {
+        this.logger.warn(`Cache retrieval failed, using fallback: ${cacheError.message}`);
+      }
+      
+      // Fallback to in-memory storage
+      if (!tokenData) {
+        const memoryData = this.emailVerificationStorage.get(cacheKey);
+        if (memoryData && memoryData.expiresAt > Date.now()) {
+          tokenData = memoryData;
+          this.logger.log(`Retrieved token from fallback memory`);
+        } else if (memoryData) {
+          this.logger.log(`Token expired in fallback memory`);
+          this.emailVerificationStorage.delete(cacheKey);
+        }
+      }
+
+      if (!tokenData) {
+        this.logger.error(`Token not found or expired: ${cacheKey}`);
+        throw new BadRequestException("Verification link expired or invalid");
+      }
+
+      if (tokenData.expiresAt < Date.now()) {
+        this.logger.error(`Token expired`);
+        // Clean up expired token
+        try {
+          await this.cacheService.del(cacheKey);
+        } catch (e) {}
+        this.emailVerificationStorage.delete(cacheKey);
+        throw new BadRequestException("Verification link has expired");
+      }
+
+      // Mark email as verified
+      const verifiedEmailKey = `verified_email_${tokenData.email}`;
+      this.logger.log(`Marking email as verified with key: ${verifiedEmailKey}`);
+      
+      const verifiedData = {
+        email: tokenData.email,
+        verified: true,
+        expiresAt: Date.now() + (10 * 60 * 1000), // 10 minutes to complete registration
+      };
+
+      // Try cache first
+      try {
+        await this.cacheService.set(verifiedEmailKey, JSON.stringify(verifiedData), 600); // 10 minutes
+      } catch (cacheError) {
+        this.logger.warn(`Cache storage failed for verification, using fallback: ${cacheError.message}`);
+      }
+      
+      // Fallback to in-memory storage
+      this.emailVerificationStorage.set(verifiedEmailKey, verifiedData);
+
+      // Remove verification token from cache
+      this.logger.log(`Removing verification token from cache: ${cacheKey}`);
+      try {
+        await this.cacheService.del(cacheKey);
+      } catch (cacheError) {
+        this.logger.warn(`Cache delete failed: ${cacheError.message}`);
+      }
+      this.emailVerificationStorage.delete(cacheKey);
+
+      return ResponseHelper.success(
+        { 
+          is_email_verified: true,
+          email: tokenData.email,
+          email_verified_for_registration: true 
+        },
+        "Email verified successfully! You can now complete your registration.",
+        "Email Verification"
+      );
+    } catch (error) {
+      this.logger.error(`Verify email token error: ${error.message}`);
       throw error;
     }
   }

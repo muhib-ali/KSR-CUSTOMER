@@ -12,6 +12,7 @@ import { CustomerToken } from "../entities/customer-token.entity";
 import { AppConfigService } from "../config/config.service";
 import { CacheService } from "../cache/cache.service";
 import { AuthExtendedModule } from "./auth-extended.module";
+import { EmailService } from "../common/services/email.service";
 
 @Module({
   imports: [
@@ -39,7 +40,7 @@ import { AuthExtendedModule } from "./auth-extended.module";
     forwardRef(() => AuthExtendedModule),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, EmailService],
   exports: [AuthService, JwtAuthGuard, JwtModule, AuthExtendedModule],
 })
 export class AuthModule {}
