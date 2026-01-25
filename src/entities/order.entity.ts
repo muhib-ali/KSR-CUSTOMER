@@ -62,6 +62,9 @@ export class Order extends BaseAuditColumns {
   @Column({ type: "text", nullable: true })
   notes: string;
 
+  @Column({ type: "varchar", length: 20, default: 'regular' })
+  order_type: string;
+
   // Relationships - Use string to avoid circular import
   @ManyToOne("Customer", "orders")
   @JoinColumn({ name: "user_id" })

@@ -7,6 +7,7 @@ import {
   UseGuards,
   Request,
   ValidationPipe,
+  Param,
 } from "@nestjs/common";
 import { Throttle } from "@nestjs/throttler";
 import {
@@ -15,6 +16,7 @@ import {
   ApiResponse,
   ApiBearerAuth,
   ApiBody,
+  ApiParam,
 } from "@nestjs/swagger";
 import { AuthService } from "./auth.service";
 import { LoginDto } from "./dto/login.dto";
@@ -24,6 +26,10 @@ import { RegisterDto } from "./dto/register.dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { EditProfileDto } from "./dto/edit-profile.dto";
 import { ChangePasswordDto } from "./dto/change-password.dto";
+import { SendPhoneOtpDto } from "./dto/send-phone-otp.dto";
+import { VerifyPhoneOtpDto } from "./dto/verify-phone-otp.dto";
+import { SendEmailVerificationDto } from "./dto/send-email-verification.dto";
+import { VerifyEmailTokenDto } from "./dto/verify-email-token.dto";
 
 @ApiTags("Authentication")
 @Controller("auth")
@@ -366,5 +372,130 @@ export class AuthController {
   })
   async editProfile(@Request() req, @Body(ValidationPipe) editProfileDto: EditProfileDto) {
     return this.authService.editProfile(req.user.id, editProfileDto);
+  }
+
+  @Post("send-phone-otp")
+  @ApiOperation({ 
+    summary: "Send OTP to phone number",
+    description: "Send a 6-digit OTP to the provided phone number for verification"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "OTP sent successfully",
+    schema: {
+      example: {
+        statusCode: 200,
+        status: true,
+        message: "OTP sent successfully",
+        heading: "Phone Verification",
+        data: {
+          otp: "123456" // Only for testing, remove in production
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: "Bad request" })
+  @ApiResponse({ status: 429, description: "Too many requests" })
+  @ApiBody({ 
+    type: SendPhoneOtpDto,
+    description: "Send OTP request"
+  })
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 OTP requests per minute
+  async sendPhoneOtp(@Body(ValidationPipe) sendPhoneOtpDto: SendPhoneOtpDto) {
+    return this.authService.sendPhoneOtp(sendPhoneOtpDto);
+  }
+
+  @Post("verify-phone-otp")
+  @ApiOperation({ 
+    summary: "Verify phone number with OTP",
+    description: "Verify the phone number using the 6-digit OTP sent to the phone"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Phone verified successfully",
+    schema: {
+      example: {
+        statusCode: 200,
+        status: true,
+        message: "Phone number verified successfully",
+        heading: "Phone Verification",
+        data: {
+          is_phone_verified: true
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: "Invalid or expired OTP" })
+  @ApiResponse({ status: 429, description: "Too many requests" })
+  @ApiBody({ 
+    type: VerifyPhoneOtpDto,
+    description: "Verify OTP request"
+  })
+  @Throttle({ default: { limit: 10, ttl: 60000 } }) // 10 verification attempts per minute
+  async verifyPhoneOtp(@Body(ValidationPipe) verifyPhoneOtpDto: VerifyPhoneOtpDto) {
+    return this.authService.verifyPhoneOtp(verifyPhoneOtpDto);
+  }
+
+  @Post("send-email-verification")
+  @ApiOperation({ 
+    summary: "Send email verification link",
+    description: "Send a verification link to the provided email address"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Verification email sent successfully",
+    schema: {
+      example: {
+        statusCode: 200,
+        status: true,
+        message: "Please check your email and click the verification link",
+        heading: "Email Verification",
+        data: {
+          message: "Verification email sent",
+          email: "user@example.com"
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: "Email already registered" })
+  @ApiResponse({ status: 429, description: "Too many requests" })
+  @ApiBody({ 
+    type: SendEmailVerificationDto,
+    description: "Send email verification request"
+  })
+  @Throttle({ default: { limit: 3, ttl: 60000 } }) // 3 requests per minute
+  async sendEmailVerification(@Body(ValidationPipe) sendEmailVerificationDto: SendEmailVerificationDto) {
+    return this.authService.sendEmailVerification(sendEmailVerificationDto);
+  }
+
+  @Get("verify-email/:token")
+  @ApiOperation({ 
+    summary: "Verify email with token",
+    description: "Verify the email address using the token from the verification link"
+  })
+  @ApiResponse({
+    status: 200,
+    description: "Email verified successfully",
+    schema: {
+      example: {
+        statusCode: 200,
+        status: true,
+        message: "Email verified successfully",
+        heading: "Email Verification",
+        data: {
+          is_email_verified: true,
+          email: "user@example.com"
+        }
+      }
+    }
+  })
+  @ApiResponse({ status: 400, description: "Invalid or expired token" })
+  @ApiParam({
+    name: 'token',
+    description: 'Email verification token',
+    example: 'abc123-def456-ghi789'
+  })
+  async verifyEmailToken(@Param('token') token: string) {
+    return this.authService.verifyEmailToken({ token });
   }
 }

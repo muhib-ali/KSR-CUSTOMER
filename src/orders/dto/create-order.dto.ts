@@ -80,4 +80,14 @@ export class CreateOrderDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({
+    description: "Order type (optional). This value is ignored by the server because the order type is derived from the cart item type (regular/bulk).",
+    example: "regular",
+    required: false,
+    default: "regular"
+  })
+  @IsOptional()
+  @IsString()
+  order_type?: string;
 }

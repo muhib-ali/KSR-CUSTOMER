@@ -18,6 +18,8 @@ import { WishlistModule } from "./wishlist/wishlist.module";
 import { OrdersModule } from "./orders/orders.module";
 import { PromoCodeModule } from "./promo-codes/promo-code.module";
 import { ReviewsModule } from "./reviews/reviews.module";
+import {CurrencyModule} from './currency/currency.module'
+import { BlogsModule } from "./blogs/blogs.module";
 import { GlobalExceptionFilter } from "./filters/global-exception.filter";
 import { ThrottlerGuard } from "@nestjs/throttler";
 
@@ -41,17 +43,17 @@ import { ThrottlerGuard } from "@nestjs/throttler";
       {
         name: "short",
         ttl: 1000, // 1 second
-        limit: 3, // 3 requests per second
+        limit: 1000, // 1000 requests per second
       },
       {
         name: "medium",
         ttl: 10000, // 10 seconds
-        limit: 20, // 20 requests per 10 seconds
+        limit: 10000, // 10000 requests per 10 seconds
       },
       {
         name: "long",
         ttl: 60000, // 1 minute
-        limit: 100, // 100 requests per minute
+        limit: 50000, // 50000 requests per minute
       },
     ]),
 
@@ -84,6 +86,8 @@ import { ThrottlerGuard } from "@nestjs/throttler";
     OrdersModule,
     PromoCodeModule,
     ReviewsModule,
+    CurrencyModule,
+    BlogsModule,
   ],
   providers: [
     // Global exception filter

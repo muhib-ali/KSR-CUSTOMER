@@ -49,17 +49,22 @@ export class ReviewsService {
       throw new ConflictException('You have already reviewed this product');
     }
 
-    // Verify purchase: check if user has an accepted order containing this product
+    // Verify purchase: check if user has an accepted or partially_accepted order containing this product
+    // For partially_accepted orders, only items with item_status='accepted' can be reviewed
     const verifiedOrder = await this.orderRepository
       .createQueryBuilder('order')
       .innerJoin('order.order_items', 'order_item')
       .where('order.user_id = :userId', { userId })
-      .andWhere('order.status = :status', { status: OrderStatus.ACCEPTED })
+      .andWhere('(order.status = :acceptedStatus OR order.status = :partialStatus)', { 
+        acceptedStatus: OrderStatus.ACCEPTED,
+        partialStatus: OrderStatus.PARTIALLY_ACCEPTED 
+      })
       .andWhere('order_item.product_id = :productId', { productId })
+      .andWhere('order_item.item_status = :itemStatus', { itemStatus: 'accepted' })
       .getOne();
 
     if (!verifiedOrder) {
-      throw new ForbiddenException('You can only review products from your accepted orders');
+      throw new ForbiddenException('You can only review accepted products from your orders');
     }
 
     // Create the review

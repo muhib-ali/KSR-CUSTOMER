@@ -1,4 +1,4 @@
-import { IsUUID, IsNumber, Min, Max, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface, registerDecorator } from 'class-validator';
+import { IsUUID, IsNumber, Min, Max, IsOptional, IsString, ValidationArguments, ValidatorConstraint, ValidatorConstraintInterface, registerDecorator } from 'class-validator';
 import { Type } from 'class-transformer';
 
 // Custom validator to accept UUID-like strings
@@ -37,6 +37,25 @@ export class AddToCartDto {
   @Min(1)
   @Max(999)
   quantity: number;
+
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  requested_price_per_unit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  offered_price_per_unit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  bulk_min_quantity?: number;
 }
 
 export class UpdateCartDto {

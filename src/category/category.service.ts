@@ -43,14 +43,12 @@ export class CategoryService {
   async getAllCategories(): Promise<ApiResponse<any>> {
     const categories = await this.categoryRepository
       .createQueryBuilder('category')
-      .leftJoinAndSelect('category.products', 'products')
-      .where('products.stock_quantity > 0')
-      .orWhere('products.id IS NULL')
+      .where('category.is_active = :isActive', { isActive: true })
       .orderBy('category.name', 'ASC')
       .getMany();
 
     return ResponseHelper.success(
-      categories,
+      { categories },
       'Categories retrieved successfully',
       'Categories'
     );

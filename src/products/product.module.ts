@@ -10,6 +10,7 @@ import { Variant } from '../entities/variant.entity';
 import { Order } from '../entities/order.entity';
 import { OrderItem } from '../entities/order-item.entity';
 import { Review } from '../entities/review.entity';
+import { BulkPrice } from '../entities/bulk-price.entity';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { Review } from '../entities/review.entity';
       Order,
       OrderItem,
       Review,
+      BulkPrice,
     ]),
   ],
   controllers: [

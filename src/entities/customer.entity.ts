@@ -17,6 +17,9 @@ export class Customer extends BaseAuditColumns {
   @Column({ type: "varchar" })
   password: string;
 
+  @Column({ type: "uuid" })
+  role_id: string;
+
   @Column({ type: "varchar", nullable: true })
   phone: string;
 

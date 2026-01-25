@@ -70,6 +70,7 @@ async function bootstrap() {
     .addTag("Brands", "Brand management endpoints")
     .addTag("Cart", "Shopping cart endpoints")
     .addTag("Orders", "Order management endpoints")
+    .addTag("Blogs", "Blog posts endpoints")
     .addTag("Health", "Health check endpoints")
     .build();
 

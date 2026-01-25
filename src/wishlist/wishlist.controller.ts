@@ -8,6 +8,7 @@ import {
   ValidationPipe,
   UseGuards,
   Request,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -184,14 +185,28 @@ export class WishlistController {
   })
   async removeFromWishlist(@Request() req, @Param('productId') productId: string) {
     const customerId = this.getCustomerId(req);
-    await this.wishlistService.removeFromWishlist(customerId, productId);
-    return {
-      statusCode: 200,
-      status: true,
-      message: 'Product removed from wishlist successfully',
-      heading: 'Wishlist',
-      data: null,
-    };
+    
+    try {
+      await this.wishlistService.removeFromWishlist(customerId, productId);
+      return {
+        statusCode: 200,
+        status: true,
+        message: 'Product removed from wishlist successfully',
+        heading: 'Wishlist',
+        data: null,
+      };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        return {
+          statusCode: 200,
+          status: true,
+          message: 'Product not found in wishlist (already removed)',
+          heading: 'Wishlist',
+          data: null,
+        };
+      }
+      throw error;
+    }
   }
 
   @Get()

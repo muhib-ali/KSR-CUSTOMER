@@ -46,7 +46,22 @@ export class OrdersService {
     // 2. Validate cart items and get complete product details
     const validatedItems = await this.validateCartItems(createOrderDto.items, userId);
 
-    // 3. Calculate totals and get promo code details if provided
+    // 3. Determine order type from cart (do not trust request body)
+    const uniqueCartTypes = Array.from(
+      new Set(
+        validatedItems
+          .map((i) => (i.cart_type || 'regular').toString())
+          .filter((t) => t)
+      )
+    );
+
+    if (uniqueCartTypes.length > 1) {
+      throw new BadRequestException('Cart contains mixed item types. Please clear your cart and try again.');
+    }
+
+    const orderType = uniqueCartTypes[0] === 'bulk' ? 'bulk' : 'regular';
+
+    // 4. Calculate totals and get promo code details if provided
     let promoCodeId = null;
     const { subtotal, discount, total } = await this.calculateTotals(
       validatedItems,
@@ -59,10 +74,13 @@ export class OrdersService {
       promoCodeId = promo.id;
     }
 
-    // 4. Generate order number
+    // 5. Generate order number
     const orderNumber = this.generateOrderNumber();
 
-    // 5. Create order with user info (secure)
+    // 6. Create order with user info (secure)
+    // For regular orders, set status to accepted; for bulk orders, it will be determined based on item statuses
+    const initialOrderStatus = orderType === 'regular' ? OrderStatus.ACCEPTED : OrderStatus.PENDING;
+    
     const order = this.orderRepository.create({
       user_id: userId,
       order_number: orderNumber,
@@ -85,22 +103,29 @@ export class OrdersService {
       discount_amount: discount,
       total_amount: total,
       promo_code_id: promoCodeId,
-      status: OrderStatus.PENDING,
-      notes: createOrderDto.notes || ''
+      status: initialOrderStatus,
+      notes: createOrderDto.notes || '',
+      order_type: orderType
     });
 
     // 6. Save order
     const savedOrder = await this.orderRepository.save(order);
 
     // 7. Create order items with validated product data
-    const orderItems = await this.createOrderItems(savedOrder.id, validatedItems);
+    const orderItems = await this.createOrderItems(savedOrder.id, validatedItems, orderType);
 
-    // 8. Handle promo code usage (if applicable)
+    // 8. For bulk orders, update order status based on item statuses
+    if (orderType === 'bulk') {
+      console.log('Updating bulk order status for order:', savedOrder.id);
+      await this.updateBulkOrderStatus(savedOrder.id);
+    }
+
+    // 9. Handle promo code usage (if applicable)
     if (createOrderDto.promo_code) {
       await this.handlePromoCodeUsage(createOrderDto.promo_code);
     }
 
-    // 9. Deduct product quantities
+    // 10. Deduct product quantities
     console.log('About to deduct product quantities...');
     try {
       await this.deductProductQuantities(validatedItems);
@@ -110,7 +135,7 @@ export class OrdersService {
       console.error('Failed to deduct product quantities:', error);
     }
 
-    // 10. Clear cart items after successful order creation
+    // 11. Clear cart items after successful order creation
     try {
       await this.clearCartItems(userId, createOrderDto.items);
     } catch (error) {
@@ -232,7 +257,12 @@ export class OrdersService {
       }
 
       // Calculate prices from product data
-      const unitPrice = product.total_price; // Tax-inclusive price from product
+      // For bulk cart items we rely on the offered price stored on cart, otherwise fall back to product price
+      const offeredPrice = item.offered_price_per_unit ?? cartItem.offered_price_per_unit;
+      const requestedPrice = item.requested_price_per_unit ?? cartItem.requested_price_per_unit;
+      const bulkMinQty = item.bulk_min_quantity ?? cartItem.bulk_min_quantity;
+
+      const unitPrice = offeredPrice ?? product.total_price; // Tax-inclusive price from product
       const totalPrice = cartItem.quantity * unitPrice;
 
       validatedItems.push({
@@ -241,7 +271,11 @@ export class OrdersService {
         product_sku: product.sku || '',
         quantity: cartItem.quantity,
         unit_price: unitPrice,
-        total_price: totalPrice
+        total_price: totalPrice,
+        cart_type: cartItem.type || 'regular',
+        requested_price_per_unit: requestedPrice,
+        offered_price_per_unit: offeredPrice,
+        bulk_min_quantity: bulkMinQty
       });
     }
 
@@ -331,10 +365,24 @@ export class OrdersService {
     return `ORD-${timestamp}-${random}`;
   }
 
-  private async createOrderItems(orderId: string, items: any[]): Promise<OrderItem[]> {
+  private async createOrderItems(orderId: string, items: any[], orderType: string): Promise<OrderItem[]> {
     const orderItems = [];
 
     for (const item of items) {
+      let itemStatus: string;
+      
+      if (orderType === 'regular') {
+        // Regular orders: all items are accepted
+        itemStatus = 'accepted';
+      } else {
+        // Bulk orders: compare offered price with requested price
+        if (item.offered_price_per_unit && item.requested_price_per_unit) {
+          itemStatus = item.offered_price_per_unit === item.requested_price_per_unit ? 'accepted' : 'pending';
+        } else {
+          itemStatus = 'pending'; // fallback if prices are missing
+        }
+      }
+
       const orderItem = this.orderItemRepository.create({
         order_id: orderId,
         product_id: item.product_id,
@@ -342,13 +390,51 @@ export class OrdersService {
         product_sku: item.product_sku || '',
         quantity: item.quantity,
         unit_price: item.unit_price,
-        total_price: item.total_price
+        total_price: item.total_price,
+        requested_price_per_unit: item.requested_price_per_unit,
+        offered_price_per_unit: item.offered_price_per_unit,
+        bulk_min_quantity: item.bulk_min_quantity,
+        item_status: itemStatus
       });
 
       orderItems.push(await this.orderItemRepository.save(orderItem));
     }
 
     return orderItems;
+  }
+
+  private async updateBulkOrderStatus(orderId: string): Promise<void> {
+    console.log('updateBulkOrderStatus method called for order:', orderId);
+    // Get all order items for this order
+    const orderItems = await this.orderItemRepository.find({
+      where: { order_id: orderId }
+    });
+
+    if (orderItems.length === 0) return;
+
+    // Count item statuses
+    const acceptedCount = orderItems.filter(item => item.item_status === 'accepted').length;
+    const pendingCount = orderItems.filter(item => item.item_status === 'pending').length;
+    const totalCount = orderItems.length;
+
+    let newOrderStatus: OrderStatus;
+    
+    if (acceptedCount === totalCount) {
+      // All items accepted
+      newOrderStatus = OrderStatus.ACCEPTED;
+    } else if (acceptedCount === 0) {
+      // All items pending
+      newOrderStatus = OrderStatus.PENDING;
+    } else {
+      // Some items accepted, some pending
+      newOrderStatus = OrderStatus.PARTIALLY_ACCEPTED;
+    }
+
+    // Update the order status
+    await this.orderRepository.update(
+      { id: orderId },
+      { status: newOrderStatus }
+    );
   }
 
   private async handlePromoCodeUsage(promoCode: string): Promise<void> {
