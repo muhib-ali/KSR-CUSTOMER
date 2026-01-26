@@ -8,12 +8,55 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const logger = new Logger("Bootstrap");
 
-  // Enable CORS
+  // Build allowed origins array, filtering out undefined values
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://localhost:3002',
+    'http://localhost:3007',
+    process.env.FRONTEND_URL,
+  ].filter((origin): origin is string => Boolean(origin));
+
+  // Enable CORS with comprehensive configuration
   app.enableCors({
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3007', process.env.FRONTEND_URL], // Add your frontend URLs
+    origin: (origin, callback) => {
+      // Allow requests with no origin (like mobile apps, Postman, etc.)
+      if (!origin) {
+        return callback(null, true);
+      }
+      
+      // Check if origin is in allowed list
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      
+      // For production, allow all origins if FRONTEND_URL is not set
+      if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
+        return callback(null, true);
+      }
+      
+      callback(new Error('Not allowed by CORS'));
+    },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'Accept'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH', 'HEAD'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'Origin',
+      'X-Requested-With',
+      'Access-Control-Request-Method',
+      'Access-Control-Request-Headers',
+      'X-CSRF-Token',
+    ],
+    exposedHeaders: [
+      'Authorization',
+      'Content-Range',
+      'X-Content-Range',
+      'X-Total-Count',
+    ],
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   });
 
   // Add raw body parser for debugging
