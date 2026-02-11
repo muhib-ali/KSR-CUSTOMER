@@ -32,7 +32,7 @@ export class CurrencyController {
 
   @Get('rates/:baseCurrency')
   @ApiOperation({ summary: 'Get exchange rates for a base currency' })
-  @ApiParam({ name: 'baseCurrency', description: 'Base currency code (e.g., USD, EUR)', type: String })
+  @ApiParam({ name: 'baseCurrency', description: 'Base currency code (e.g., NOK, USD, EUR)', type: String })
   @ApiResponse({
     status: 200,
     description: 'Exchange rates retrieved successfully',
@@ -49,7 +49,7 @@ export class CurrencyController {
       required: ['amount', 'from', 'to'],
       properties: {
         amount: { type: 'number', example: 100 },
-        from: { type: 'string', example: 'USD' },
+        from: { type: 'string', example: 'NOK' },
         to: { type: 'string', example: 'PKR' },
       },
     },

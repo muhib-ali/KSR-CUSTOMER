@@ -57,7 +57,7 @@ export class Product extends BaseAuditColumns {
   @Column({ type: "uuid" })
   brand_id: string;
 
-  @ApiProperty({ description: 'Currency', example: 'USD' })
+  @ApiProperty({ description: 'Currency', example: 'NOK' })
   @Column({ type: "varchar" })
   currency: string;
 

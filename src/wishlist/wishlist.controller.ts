@@ -239,7 +239,7 @@ export class WishlistController {
                   title: { type: 'string', example: 'Sample Product' },
                   description: { type: 'string', example: 'Product description' },
                   price: { type: 'number', example: 99.99 },
-                  currency: { type: 'string', example: 'USD' },
+                  currency: { type: 'string', example: 'NOK' },
                   product_img_url: { type: 'string', example: 'https://example.com/image.jpg' },
                   stock_quantity: { type: 'number', example: 10 },
                   sku: { type: 'string', example: 'PROD-001' }
