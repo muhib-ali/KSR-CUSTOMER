@@ -9,6 +9,7 @@ import {
 } from "typeorm";
 import { BaseAuditColumns } from "./base-audit-columns.entity";
 import { Category } from "./category.entity";
+import { Subcategory } from "./subcategory.entity";
 import { Brand } from "./brand.entity";
 import { ProductImage } from "./product-image.entity";
 import { Tax } from "./tax.entity";
@@ -53,11 +54,15 @@ export class Product extends BaseAuditColumns {
   @Column({ type: "uuid" })
   category_id: string;
 
+  @ApiPropertyOptional({ description: 'Subcategory ID', example: '123e4567-e89b-12d3-a456-426614174000' })
+  @Column({ type: "uuid", nullable: true })
+  subcategory_id: string;
+
   @ApiProperty({ description: 'Brand ID', example: '123e4567-e89b-12d3-a456-426614174001' })
   @Column({ type: "uuid" })
   brand_id: string;
 
-  @ApiProperty({ description: 'Currency', example: 'USD' })
+  @ApiProperty({ description: 'Currency', example: 'NOK' })
   @Column({ type: "varchar" })
   currency: string;
 
@@ -120,6 +125,10 @@ export class Product extends BaseAuditColumns {
   @ManyToOne(() => Category)
   @JoinColumn({ name: "category_id" })
   category: Category;
+
+  @ManyToOne(() => Subcategory, { nullable: true })
+  @JoinColumn({ name: "subcategory_id" })
+  subcategory: Subcategory;
 
   @ManyToOne(() => Brand)
   @JoinColumn({ name: "brand_id" })

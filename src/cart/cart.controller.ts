@@ -102,7 +102,7 @@ export class CartController {
                   price: { type: 'number', example: 129.99 },
                   cost: { type: 'number', example: 99.99 },
                   freight: { type: 'number', example: 15.00 },
-                  currency: { type: 'string', example: 'USD' },
+                  currency: { type: 'string', example: 'NOK' },
                   product_img_url: { type: 'string', example: 'https://example.com/image.jpg' },
                   quantity: { type: 'number', example: 2 },
                   created_at: { type: 'string', example: '2024-01-01T00:00:00Z' },
@@ -115,7 +115,7 @@ export class CartController {
               properties: {
                 totalItems: { type: 'number', example: 5 },
                 totalAmount: { type: 'number', example: 649.95 },
-                currency: { type: 'string', example: 'USD' }
+                currency: { type: 'string', example: 'NOK' }
               }
             }
           }

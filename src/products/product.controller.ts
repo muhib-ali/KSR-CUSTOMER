@@ -90,6 +90,7 @@ export class ProductController {
   @ApiQuery({ name: 'page', required: false, type: Number })
   @ApiQuery({ name: 'limit', required: false, type: Number })
   @ApiQuery({ name: 'category', required: false, type: String })
+  @ApiQuery({ name: 'subcategory', required: false, type: String })
   @ApiQuery({ name: 'brand', required: false, type: String })
   @ApiQuery({ name: 'minPrice', required: false, type: Number })
   @ApiQuery({ name: 'maxPrice', required: false, type: Number })

@@ -29,6 +29,7 @@ export class ProductService {
       page = 1,
       limit = 20,
       category,
+      subcategory,
       brand,
       stock = 'all',
       minPrice,
@@ -43,6 +44,7 @@ export class ProductService {
     const queryBuilder = this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.images', 'images');
 
@@ -62,6 +64,14 @@ export class ProductService {
       } else {
         // It's a name, filter by name
         queryBuilder.andWhere('category.name = :categoryName', { categoryName: category });
+      }
+    }
+
+    if (subcategory) {
+      if (subcategory.includes('-') && subcategory.length > 20) {
+        queryBuilder.andWhere('subcategory.id = :subcategoryId', { subcategoryId: subcategory });
+      } else {
+        queryBuilder.andWhere('subcategory.name = :subcategoryName', { subcategoryName: subcategory });
       }
     }
 
@@ -156,6 +166,7 @@ export class ProductService {
     const products = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.images', 'images')
       .where('product.stock_quantity > 0')
@@ -182,6 +193,7 @@ export class ProductService {
     const products = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .where('product.created_at >= :thirtyDaysAgo', { thirtyDaysAgo })
       .andWhere('product.stock_quantity > 0')
@@ -236,6 +248,7 @@ export class ProductService {
     const products = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.images', 'images')
       .where('product.stock_quantity > 10')
@@ -256,6 +269,7 @@ export class ProductService {
     const product = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.variants', 'variants')
       .where('product.id = :id', { id })
@@ -323,6 +337,7 @@ export class ProductService {
     const product = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.variants', 'variants')
       .where('product.id = :slug', { slug })
@@ -389,6 +404,7 @@ export class ProductService {
     const products = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.images', 'images')
       .where('product.category_id = :categoryId', { categoryId })
@@ -407,6 +423,7 @@ export class ProductService {
     const products = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.images', 'images')
       .where('product.brand_id = :brandId', { brandId })
@@ -435,6 +452,7 @@ export class ProductService {
     const products = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.images', 'images')
       .where('product.category_id = :categoryId', { categoryId: currentProduct.category_id })
@@ -560,6 +578,7 @@ export class ProductService {
     const products = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.images', 'images')
       .where('product.id IN (:...ids)', { ids: topIds })
@@ -608,6 +627,7 @@ export class ProductService {
     const product = await this.productRepository
       .createQueryBuilder('product')
       .leftJoinAndSelect('product.category', 'category')
+      .leftJoinAndSelect('product.subcategory', 'subcategory')
       .leftJoinAndSelect('product.brand', 'brand')
       .leftJoinAndSelect('product.images', 'images')
       .where('product.sku = :sku', { sku })

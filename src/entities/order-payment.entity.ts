@@ -27,7 +27,7 @@ export class OrderPayment extends BaseAuditColumns {
   @Column({ type: "decimal", precision: 10, scale: 2 })
   payment_amount: number;
 
-  @Column({ type: "varchar", default: "USD" })
+  @Column({ type: "varchar", default: "NOK" })
   currency: string;
 
   @Column({ type: "timestamptz", nullable: true })

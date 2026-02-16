@@ -27,6 +27,17 @@ export class CategoryController {
     return this.categoryService.getFeaturedCategories();
   }
 
+  @Get('subcategories-by-category/:categoryId')
+  @ApiOperation({ summary: 'Get subcategories by category ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Subcategories retrieved successfully',
+  })
+  @ApiParam({ name: 'categoryId', description: 'Category ID (UUID)' })
+  async getSubcategoriesByCategoryId(@Param('categoryId') categoryId: string) {
+    return this.categoryService.getSubcategoriesByCategoryId(categoryId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get category by ID' })
   @ApiResponse({

@@ -76,7 +76,7 @@ export class CartService {
         summary: {
           totalItems,
           totalAmount,
-          currency: cartItems[0]?.currency || 'USD',
+          currency: cartItems[0]?.currency || 'NOK',
           cartType: cartItems.some(item => item.type === 'bulk') ? 'bulk' : 'regular',
         },
       },

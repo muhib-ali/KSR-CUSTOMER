@@ -23,6 +23,11 @@ export class GetProductsDto {
   @IsString()
   category?: string;
 
+  @ApiPropertyOptional({ description: 'Filter by subcategory ID (use with category)', example: 'uuid' })
+  @IsOptional()
+  @IsString()
+  subcategory?: string;
+
   @ApiPropertyOptional({ description: 'Filter by brand name or ID', example: 'sony' })
   @IsOptional()
   @IsString()

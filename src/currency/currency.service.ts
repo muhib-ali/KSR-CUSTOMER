@@ -81,7 +81,7 @@ export class CurrencyService {
     }
   }
 
-  async getExchangeRates(baseCurrency: string = 'USD'): Promise<ApiResponse<ExchangeRateResponse>> {
+  async getExchangeRates(baseCurrency: string = 'NOK'): Promise<ApiResponse<ExchangeRateResponse>> {
     try {
       const cacheKey = `rates_${baseCurrency}`;
       

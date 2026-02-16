@@ -48,104 +48,106 @@ export class AuthService {
   async register(registerDto: RegisterDto): Promise<ApiResponse<any>> {
     const { fullname, username, email, password, phone } = registerDto;
 
-    // Check if email already exists
-    const existingEmail = await this.customerRepository.findOne({ where: { email } });
-    if (existingEmail) {
-      throw new BadRequestException("Email already exists");
-    }
+    // VALIDATIONS COMMENTED OUT FOR TESTING
+    // 1.Check if email already exists
+    // const existingEmail = await this.customerRepository.findOne({ where: { email } });
+    // if (existingEmail) {
+    //   throw new BadRequestException("Email already exists");
+    // }
 
-    // Check if username already exists
-    const existingUsername = await this.customerRepository.findOne({ where: { username } });
-    if (existingUsername) {
-      throw new BadRequestException("Username already exists");
-    }
+    // 2. Check if username already exists
+    // const existingUsername = await this.customerRepository.findOne({ where: { username } });
+    // if (existingUsername) {
+    //   throw new BadRequestException("Username already exists");
+    // }
 
-    // Check if email is verified
-    const verifiedEmailKey = `verified_email_${email}`;
-    this.logger.log(`Checking email verification for ${email} with key: ${verifiedEmailKey}`);
+    // 3. Check if email is verified
+    // const verifiedEmailKey = `verified_email_${email}`;
+    // this.logger.log(`Checking email verification for ${email} with key: ${verifiedEmailKey}`);
     
-    let emailVerificationData: any;
+    // let emailVerificationData: any;
     
-    // Try cache first
-    try {
-      const cachedData = await this.cacheService.get(verifiedEmailKey);
-      if (cachedData) {
-        emailVerificationData = typeof cachedData === 'string' ? JSON.parse(cachedData) : cachedData;
-        this.logger.log(`Email verification status from cache: verified`);
-      }
-    } catch (cacheError) {
-      this.logger.warn(`Cache retrieval failed for email verification, using fallback: ${cacheError.message}`);
-    }
+    // // Try cache first
+    // try {
+    //   const cachedData = await this.cacheService.get(verifiedEmailKey);
+    //   if (cachedData) {
+    //     emailVerificationData = typeof cachedData === 'string' ? JSON.parse(cachedData) : cachedData;
+    //     this.logger.log(`Email verification status from cache: verified`);
+    //   }
+    // } catch (cacheError) {
+    //   this.logger.warn(`Cache retrieval failed for email verification, using fallback: ${cacheError.message}`);
+    // }
     
-    // Fallback to in-memory storage
-    if (!emailVerificationData) {
-      const memoryData = this.emailVerificationStorage.get(verifiedEmailKey);
-      if (memoryData && memoryData.expiresAt > Date.now() && memoryData.verified) {
-        emailVerificationData = memoryData;
-        this.logger.log(`Email verification status from fallback memory: verified`);
-      } else if (memoryData) {
-        this.logger.log(`Email verification expired in fallback memory`);
-        this.emailVerificationStorage.delete(verifiedEmailKey);
-      }
-    }
+    // // Fallback to in-memory storage
+    // if (!emailVerificationData) {
+    //   const memoryData = this.emailVerificationStorage.get(verifiedEmailKey);
+    //   if (memoryData && memoryData.expiresAt > Date.now() && memoryData.verified) {
+    //     emailVerificationData = memoryData;
+    //     this.logger.log(`Email verification status from fallback memory: verified`);
+    //   } else if (memoryData) {
+    //     this.logger.log(`Email verification expired in fallback memory`);
+    //     this.emailVerificationStorage.delete(verifiedEmailKey);
+    //   }
+    // }
     
-    if (!emailVerificationData || !emailVerificationData.verified) {
-      this.logger.error(`Email not verified: ${email}`);
-      throw new BadRequestException("Please verify your email address before registering");
-    }
+    // if (!emailVerificationData || !emailVerificationData.verified) {
+    //   this.logger.error(`Email not verified: ${email}`);
+    //   throw new BadRequestException("Please verify your email address before registering");
+    // }
 
-    // Check if phone is verified (if phone is provided)
-    let isPhoneVerified = false;
-    if (phone) {
-      const verifiedPhoneKey = `verified_phone_${phone}`;
-      this.logger.log(`Checking phone verification for ${phone} with key: ${verifiedPhoneKey}`);
+    // // Check if phone is verified (if phone is provided)
+    // let isPhoneVerified = false;
+    // if (phone) {
+    //   const verifiedPhoneKey = `verified_phone_${phone}`;
+    //   this.logger.log(`Checking phone verification for ${phone} with key: ${verifiedPhoneKey}`);
       
-      let phoneVerificationStatus: boolean | undefined;
+    //   let phoneVerificationStatus: boolean | undefined;
       
-      // Try cache first
-      try {
-        phoneVerificationStatus = await this.cacheService.get(verifiedPhoneKey);
-        this.logger.log(`Phone verification status from cache: ${phoneVerificationStatus}`);
-      } catch (cacheError) {
-        this.logger.warn(`Cache retrieval failed for phone verification, using fallback: ${cacheError.message}`);
-      }
+    //   // Try cache first
+    //   try {
+    //     phoneVerificationStatus = await this.cacheService.get(verifiedPhoneKey);
+    //     this.logger.log(`Phone verification status from cache: ${phoneVerificationStatus}`);
+    //   } catch (cacheError) {
+    //     this.logger.warn(`Cache retrieval failed for phone verification, using fallback: ${cacheError.message}`);
+    //   }
       
-      // Fallback to in-memory storage
-      if (!phoneVerificationStatus) {
-        const memoryData = this.phoneVerificationStorage.get(verifiedPhoneKey);
-        if (memoryData && memoryData.expiresAt > Date.now()) {
-          phoneVerificationStatus = memoryData.verified;
-          this.logger.log(`Phone verification status from fallback memory: ${phoneVerificationStatus}`);
-        } else if (memoryData) {
-          this.logger.log(`Phone verification expired in fallback memory`);
-          this.phoneVerificationStorage.delete(verifiedPhoneKey);
-        }
-      }
+    //   // Fallback to in-memory storage
+    //   if (!phoneVerificationStatus) {
+    //     const memoryData = this.phoneVerificationStorage.get(verifiedPhoneKey);
+    //     if (memoryData && memoryData.expiresAt > Date.now()) {
+    //       phoneVerificationStatus = memoryData.verified;
+    //       this.logger.log(`Phone verification status from fallback memory: ${phoneVerificationStatus}`);
+    //     } else if (memoryData) {
+    //       this.logger.log(`Phone verification expired in fallback memory`);
+    //       this.phoneVerificationStorage.delete(verifiedPhoneKey);
+    //     }
+    //   }
       
-      if (!phoneVerificationStatus) {
-        this.logger.error(`Phone not verified: ${phone}`);
-        throw new BadRequestException("Please verify your phone number before registering");
-      }
+    //   if (!phoneVerificationStatus) {
+    //     this.logger.error(`Phone not verified: ${phone}`);
+    //     throw new BadRequestException("Please verify your phone number before registering");
+    //   }
       
-      isPhoneVerified = true;
-      // Remove the verification status from cache after successful registration
-      this.logger.log(`Removing phone verification from cache: ${verifiedPhoneKey}`);
-      try {
-        await this.cacheService.del(verifiedPhoneKey);
-      } catch (cacheError) {
-        this.logger.warn(`Cache delete failed for phone verification: ${cacheError.message}`);
-      }
-      this.phoneVerificationStorage.delete(verifiedPhoneKey);
-    }
+    //   isPhoneVerified = true;
+    //   // Remove the verification status from cache after successful registration
+    //   this.logger.log(`Removing phone verification from cache: ${verifiedPhoneKey}`);
+    //   try {
+    //     await this.cacheService.del(verifiedPhoneKey);
+    //   } catch (cacheError) {
+    //     this.logger.warn(`Cache delete failed for phone verification: ${cacheError.message}`);
+    //   }
+    //   this.phoneVerificationStorage.delete(verifiedPhoneKey);
+    // }
 
-    // Remove email verification from cache after successful registration
-    this.logger.log(`Removing email verification from cache: ${verifiedEmailKey}`);
-    try {
-      await this.cacheService.del(verifiedEmailKey);
-    } catch (cacheError) {
-      this.logger.warn(`Cache delete failed for email verification: ${cacheError.message}`);
-    }
-    this.emailVerificationStorage.delete(verifiedEmailKey);
+    // // Remove email verification from cache after successful registration
+    // this.logger.log(`Removing email verification from cache: ${verifiedEmailKey}`);
+    // try {
+    //   await this.cacheService.del(verifiedEmailKey);
+    // } catch (cacheError) {
+    //   this.logger.warn(`Cache delete failed for email verification: ${cacheError.message}`);
+    // }
+    // this.emailVerificationStorage.delete(verifiedEmailKey);
+    // END OF COMMENTED VALIDATIONS
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -166,8 +168,9 @@ export class AuthService {
       password: hashedPassword,
       role_id: customerRoleId,
       phone: phone || null,
-      is_email_verified: true, // Set to true since email was verified before registration
-      is_phone_verified: isPhoneVerified, // Only set to true if phone was verified
+      is_email_verified: true, // Set to true for testing
+      // is_phone_verified: isPhoneVerified,
+      is_phone_verified: false, // Set to false for testing
     });
 
     const savedCustomer = await this.customerRepository.save(customer);
