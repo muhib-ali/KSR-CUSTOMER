@@ -20,6 +20,7 @@ import { PromoCodeModule } from "./promo-codes/promo-code.module";
 import { ReviewsModule } from "./reviews/reviews.module";
 import {CurrencyModule} from './currency/currency.module'
 import { BlogsModule } from "./blogs/blogs.module";
+import { CmsModule } from "./cms/cms.module";
 import { GlobalExceptionFilter } from "./filters/global-exception.filter";
 import { ThrottlerGuard } from "@nestjs/throttler";
 
@@ -88,6 +89,7 @@ import { ThrottlerGuard } from "@nestjs/throttler";
     ReviewsModule,
     CurrencyModule,
     BlogsModule,
+    CmsModule,
   ],
   providers: [
     // Global exception filter
